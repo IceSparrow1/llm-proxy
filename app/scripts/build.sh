@@ -20,7 +20,12 @@ cd "$ROOT_DIR/app"
 # 清除 Swift 增量构建缓存，防止 CI 漏编改动的文件
 # 清除 Swift 增量缓存（保留 bun 编译产物），防止 CI 漏编
 rm -rf .build/arm64-apple-macosx .build/release/LLMProxy*
-swift build -c release
+# DISABLE_UPDATE_CHECK=1 时在编译期关闭应用内更新检查（启动检查 + 菜单项）
+SWIFT_FLAGS=()
+if [ "${DISABLE_UPDATE_CHECK:-0}" = "1" ]; then
+  SWIFT_FLAGS+=(-Xswiftc -DDISABLE_UPDATE_CHECK)
+fi
+swift build -c release "${SWIFT_FLAGS[@]}"
 
 echo "=== 3. Package .app ==="
 APP="$BUILD_DIR/LLMProxy.app"
@@ -41,8 +46,8 @@ cp -R "$ROOT_DIR/locales" "$APP/Contents/Resources/locales"
 # 拷贝 SPM resource bundle，确保 Bundle.module 能加载资源
 cp -R "$BUILD_DIR/release/LLMProxy_LLMProxy.bundle" "$APP/Contents/Resources/"
 
-# 从 package.json 读取版本号
-VERSION=$(node -p "require('$ROOT_DIR/package.json').version")
+# 版本号：默认取 package.json，可用 APP_VERSION 环境变量覆盖本地构建
+VERSION="${APP_VERSION:-$(node -p "require('$ROOT_DIR/package.json').version")}"
 
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -19,3 +19,4 @@ src/types/i18n.generated.ts
 .worktrees/
 .compound-engineering/
 .idea/
+*.bun-build

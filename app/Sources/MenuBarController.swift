@@ -392,11 +392,21 @@ class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(settingsItem)
 
         // 版本号与检查更新合并为一行（点击即检查）
+        #if DISABLE_UPDATE_CHECK
+        // 编译期关闭更新检查：仅展示版本号，无检查动作
+        let versionItem = NSMenuItem(title: loc("menu.version", currentVersion()), action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        #else
         let versionItem = NSMenuItem(title: loc("menu.versionCheck", currentVersion()), action: #selector(checkForUpdates), keyEquivalent: "")
         versionItem.target = self
         versionItem.isEnabled = !isCheckingUpdate && !isDownloadingUpdate
+        #endif
         if #available(macOS 11.0, *) {
+            #if DISABLE_UPDATE_CHECK
+            versionItem.image = coloredIcon("info.circle", .systemGray)
+            #else
             versionItem.image = coloredIcon("info.circle", .systemGreen)
+            #endif
         }
         menu.addItem(versionItem)
 
@@ -1366,6 +1376,9 @@ class MenuBarController: NSObject, NSMenuDelegate {
     /// 启动时立即检查更新，并启动 5 分钟间隔的定时检查（受自动更新开关控制）
     @MainActor
     func checkForUpdatesOnLaunch() {
+        #if DISABLE_UPDATE_CHECK
+        return // 编译期关闭更新检查
+        #endif
         // 立即执行一次静默检查
         if isAutoUpdateEnabled() {
             Task { @MainActor [weak self] in
@@ -1392,6 +1405,9 @@ class MenuBarController: NSObject, NSMenuDelegate {
     /// 执行更新检查
     @MainActor
     private func performUpdateCheck(silent: Bool) async {
+        #if DISABLE_UPDATE_CHECK
+        return // 编译期关闭更新检查
+        #endif
         guard !isCheckingUpdate else { return }
         isCheckingUpdate = true
         rebuildMenu()
