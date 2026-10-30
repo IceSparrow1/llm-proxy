@@ -50,6 +50,9 @@ async function forwardPassthroughStream(
   const decoder = new TextDecoder()
   let buffer = ''
   let rawChunks: string[] = []
+  // 流式期间按 ≥1s 间隔增量写入 responseIn，供轨迹视图实时观察流是否停滞。
+  // 只写 responseIn：responseOut 会在 updateRequest 里触发 durationMs，进行中不能写。
+  let lastPassthroughCaptureAt = 0
   // 协议专用累计器
   let anthropicUsage: Record<string, unknown> = {}
   let openaiUsage: Record<string, unknown> | null = null
@@ -69,6 +72,14 @@ async function forwardPassthroughStream(
 
     const text = decoder.decode(value, { stream: true })
     rawChunks.push(text)
+
+    if (capture && pairId !== undefined) {
+      const now = Date.now()
+      if (now - lastPassthroughCaptureAt > 1000) {
+        lastPassthroughCaptureAt = now
+        capture.updateRequest(pairId, 'responseIn', rawChunks.join(''))
+      }
+    }
 
     // 按协议解析 SSE 事件提取 usage
     if (upstreamType === 'anthropic') {
