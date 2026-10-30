@@ -137,6 +137,17 @@ export function frameTypeHistogram(frames: SseFrame[]): Array<{ type: string; co
     .sort((a, b) => b.count - a.count)
 }
 
+/** 流式阶段标签（取最后一帧有效事件倒推：思考 / 回答 / 工具调用）。 */
+export function streamPhase(frames: SseFrame[]): 'thinking' | 'answering' | 'tool' | null {
+  for (let i = frames.length - 1; i >= 0; i--) {
+    const type = frames[i].type
+    if (type.includes('reasoning')) return 'thinking'
+    if (type.includes('output_text') || type.includes('text_delta')) return 'answering'
+    if (type.includes('function_call') || type.includes('tool_calls')) return 'tool'
+  }
+  return null
+}
+
 /* ────────────────────────── 结果聚合 ────────────────────────── */
 
 export interface AggregatedToolCall {

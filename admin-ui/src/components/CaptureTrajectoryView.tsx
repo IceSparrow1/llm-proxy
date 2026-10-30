@@ -6,6 +6,7 @@ import CopyButton from './CopyButton'
 import SseFramesView from './SseFramesView'
 import AggregatedResultView from './AggregatedResultView'
 import { fmtChars, fmtSize, previewOf, type CaptureEntry } from '../lib/capture'
+import { parseSseFrames, streamPhase } from '../lib/sse'
 import {
   parseConversation,
   type ConversationMessage,
@@ -103,6 +104,8 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
   const selectedJson = selected?.message
     ? JSON.stringify(selected.message.raw, null, 2)
     : (selected?.streamRaw ?? null)
+  // 流式进行中（后端按 1s 节流增量写入 responseIn）：默认展示原始报文，便于观察流是否停滞
+  const streaming = entry.durationMs == null
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -133,7 +136,7 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
               disabled={!r.message && !r.streamRaw}
               onClick={() => {
                 setSelectedKey(r.key)
-                setTab(r.streamRaw ? 'result' : 'overview')
+                setTab(r.streamRaw ? (streaming ? 'payload' : 'result') : 'overview')
               }}
               className={
                 'relative flex h-[34px] w-full items-center gap-2 border-b border-border/60 px-4 text-left transition-colors ' +
@@ -191,9 +194,11 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
                 </TabBtn>
               ) : (
                 <>
-                  <TabBtn active={tab === 'result'} onClick={() => setTab('result')}>
-                    {t('admin.capture.resultTab')}
-                  </TabBtn>
+                  {!streaming && (
+                    <TabBtn active={tab === 'result'} onClick={() => setTab('result')}>
+                      {t('admin.capture.resultTab')}
+                    </TabBtn>
+                  )}
                   <TabBtn active={tab === 'frames'} onClick={() => setTab('frames')}>
                     {t('admin.capture.framesTab')}
                   </TabBtn>
@@ -219,9 +224,9 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
                 selected.message ? (
                   <MessageOverview msg={selected.message} />
                 ) : (
-                  <StreamOverview raw={selected.streamRaw ?? null} />
+                  <StreamOverview raw={selected.streamRaw ?? null} streaming={streaming} />
                 )
-              ) : tab === 'result' && selected.streamRaw ? (
+              ) : tab === 'result' && selected.streamRaw && !streaming ? (
                 <AggregatedResultView raw={selected.streamRaw} />
               ) : tab === 'frames' && selected.streamRaw ? (
                 <SseFramesView raw={selected.streamRaw} />
@@ -301,13 +306,49 @@ function MessageOverview({ msg }: { msg: ConversationMessage }) {
 }
 
 /** SSE 流式响应概述。 */
-function StreamOverview({ raw }: { raw: string | null }) {
+/** SSE 流式响应概述；流式进行中附实时统计（接收帧数 / 最后事件 / 阶段标签）。 */
+function StreamOverview({ raw, streaming }: { raw: string | null; streaming: boolean }) {
   const { t } = useTranslation()
+  const frames = useMemo(() => (raw ? parseSseFrames(raw) : []), [raw])
+  const phase = streaming ? streamPhase(frames) : null
+  const lastFrame = frames.length > 0 ? frames[frames.length - 1] : null
   return (
     <div className="px-4 py-3">
       <dl className="grid grid-cols-[92px_1fr] items-start gap-y-2 text-[11.5px]">
         <dt className="text-muted-foreground">{t('admin.capture.direction')}</dt>
         <dd className="font-semibold text-success-emphasis">上游→代理</dd>
+
+        {streaming && (
+          <>
+            <dt className="text-muted-foreground">{t('admin.capture.phase')}</dt>
+            <dd>
+              <span
+                className={
+                  'inline-flex h-[19px] items-center rounded-sm px-1.5 text-[10px] font-semibold ' +
+                  (phase === 'answering'
+                    ? 'bg-primary-soft text-primary-strong'
+                    : phase === 'tool'
+                      ? 'bg-success-soft text-success-emphasis'
+                      : 'bg-warning-soft text-warning-emphasis')
+                }
+              >
+                {phase === 'answering'
+                  ? t('admin.capture.tagAnswering')
+                  : phase === 'tool'
+                    ? t('admin.capture.tagToolCall')
+                    : t('admin.capture.tagThinking')}
+              </span>
+            </dd>
+
+            <dt className="text-muted-foreground">{t('admin.capture.eventsReceived')}</dt>
+            <dd className="font-mono text-foreground">
+              {t('admin.capture.framesCount', { count: frames.length })}
+            </dd>
+
+            <dt className="text-muted-foreground">{t('admin.capture.lastEvent')}</dt>
+            <dd className="font-mono text-foreground">{lastFrame?.time ?? '—'}</dd>
+          </>
+        )}
 
         <dt className="text-muted-foreground">{t('admin.capture.contentType')}</dt>
         <dd className="text-foreground">{t('admin.capture.sseRaw')}</dd>
@@ -315,7 +356,8 @@ function StreamOverview({ raw }: { raw: string | null }) {
         <dt className="text-muted-foreground">{t('admin.capture.size')}</dt>
         <dd className="font-mono text-foreground">{fmtSize(raw)}</dd>
       </dl>
-      <p className="mt-3 text-[11px] text-muted-foreground">{t('admin.capture.sseRawHint')}</p>    </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">{t('admin.capture.sseRawHint')}</p>
+    </div>
   )
 }
 

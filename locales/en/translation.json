@@ -370,6 +370,12 @@
       "filterEmpty": "No frames of this event type",
       "frameData": "Frame #{{index}} data",
       "sseNoFrames": "No SSE frames parsed",
+      "phase": "Phase",
+      "eventsReceived": "Received",
+      "lastEvent": "Last event",
+      "tagThinking": "Thinking",
+      "tagAnswering": "Answering",
+      "tagToolCall": "Tool call",
       "parseFailedHint": "Could not parse the request body into messages — switch to Proxy View for the raw payloads"
     },
     "test": {

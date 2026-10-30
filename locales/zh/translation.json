@@ -370,6 +370,12 @@
       "filterEmpty": "该事件类型下没有帧",
       "frameData": "帧 #{{index}} data",
       "sseNoFrames": "未解析到 SSE 帧",
+      "phase": "当前阶段",
+      "eventsReceived": "已接收",
+      "lastEvent": "最后事件",
+      "tagThinking": "思考中",
+      "tagAnswering": "回答中",
+      "tagToolCall": "工具调用中",
       "parseFailedHint": "无法将请求体解析为消息列表，可切换「代理模式」查看原始报文"
     },
     "test": {
