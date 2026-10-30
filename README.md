@@ -13,7 +13,7 @@ A local LLM proxy server — single port serving both admin UI and AI API, with 
 - 📊 **Admin UI**: Alpine.js SPA with dashboard, provider management, adapter config, vision settings, and capture debugger
 - 🎯 **Virtual Adapters**: Custom endpoints with model remapping (`/{adapter-name}/v1/...`)
 - 📡 **SSE Streaming**: 4 bidirectional stream converters with per-line timestamps
-- 🔍 **Protocol Capture**: Ring buffer recording raw request/response pairs with side-by-side diff
+- 🔍 **Protocol Capture**: Ring buffer recording raw request/response pairs — detail drawer with a proxy view (4-phase payloads) and an LLM trajectory view (message-level conversation with role/tool recognition, aggregated SSE result: reasoning / output text / tool calls) plus a per-frame SSE events view
 - 🔥 **Hot Reload**: Atomic config swap without dropping in-flight requests
 - 📈 **Token Tracking**: Per-provider token usage statistics
 
@@ -267,8 +267,31 @@ npm run dev          # Start proxy in dev mode
 npm test             # Run 280 tests
 
 # macOS app
-npm run build:app    # Build .app + .dmg
+npm run build:app    # Build .app + .dmg installer
 ```
+
+### Local macOS installer (.dmg)
+
+Build an installer for local use — the target architecture follows the build machine automatically (arm64 on M-series, x64 on Intel).
+
+Prerequisites: Node.js ≥ 20, [bun](https://bun.sh) (`brew install oven-sh/bun/bun` — compiles the proxy into a standalone binary), and Xcode command line tools (`xcode-select --install`).
+
+```bash
+npm run build:app
+```
+
+Artifacts in `app/.build/`:
+
+- `LLMProxy.app` — app bundle
+- `LLMProxy-v{version}.dmg` — drag-to-install installer (mounts with an Applications symlink)
+
+Install locally: open the DMG, drag `LLMProxy.app` into `/Applications` (replace the old one), then:
+
+```bash
+xattr -cr /Applications/LLMProxy.app   # only if macOS blocks the unsigned app
+```
+
+The admin UI (including the capture trajectory view) is bundled into the app as a single HTML file — repackaging the app picks up any admin-ui changes.
 
 ## FAQ
 

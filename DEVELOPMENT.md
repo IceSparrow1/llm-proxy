@@ -40,13 +40,25 @@ npm run dev
 **Build:**
 ```bash
 npm run build
-# Runs: tsc → copy admin-ui.html → esbuild admin-app.js
+# Runs: generate:i18n-types (prebuild) → tsc → vite build admin-ui
+#       → copy admin-ui/dist/admin-ui.html to dist/api/
 ```
 
 **Type check only:**
 ```bash
 npm run typecheck   # tsc --noEmit
 ```
+
+### macOS App Packaging
+
+`npm run build:app` runs `app/scripts/build.sh`, which:
+
+1. Builds the proxy (`npm run build`) and compiles it into a standalone binary with `bun build --compile` (arm64 on Apple Silicon, x64 on Intel — auto-detected)
+2. Builds the Swift menu bar app (`swift build -c release`)
+3. Assembles `app/.build/LLMProxy.app` (binary + `admin-ui.html` + locales + icons)
+4. Creates `app/.build/LLMProxy-v{version}.dmg` (drag-to-install image with an Applications symlink) and verifies it mounts
+
+Prerequisites beyond Node.js: [bun](https://bun.sh) and Xcode command line tools. Install the DMG locally by dragging `LLMProxy.app` to `/Applications`; run `xattr -cr /Applications/LLMProxy.app` if macOS blocks the unsigned binary.
 
 **Clean:**
 ```bash

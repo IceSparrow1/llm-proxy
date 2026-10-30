@@ -13,7 +13,7 @@
 - 📊 **管理界面**：Alpine.js 单页应用，包含仪表盘、Provider 管理、适配器配置、识图设置、抓包调试
 - 🎯 **虚拟适配器**：自定义端点 + 模型重映射（`/{adapter-name}/v1/...`）
 - 📡 **SSE 流式**：4 个双向流转换器，每行带时间戳
-- 🔍 **协议抓包**：环形缓冲记录原始请求/响应，支持左右对比 + 差异分析
+- 🔍 **协议抓包**：环形缓冲记录原始请求/响应，支持左右对比 + 差异分析；详情抽屉提供代理视图（四阶段报文）与 LLM 轨迹视图（消息级对话、role/tool 识别、SSE 结果聚合：思考 / 输出文本 / 工具调用），并附逐帧事件视图
 - 🔥 **热加载**：配置原子替换，进行中请求不受影响
 - 📈 **Token 统计**：按 Provider 统计 token 使用量
 
@@ -250,8 +250,31 @@ Client → POST /v1/{messages|chat/completions|responses}
 ```bash
 npm run dev          # 开发模式启动代理
 npm test             # 运行 280 个测试
-npm run build:app    # 构建 macOS .app + .dmg
+npm run build:app    # 构建 macOS .app + .dmg 安装包
 ```
+
+### 本地打包 macOS 安装包（.dmg）
+
+打包目标架构跟随当前机器自动选择（Apple Silicon 为 arm64，Intel 为 x64）。
+
+前置依赖：Node.js ≥ 20、[bun](https://bun.sh)（`brew install oven-sh/bun/bun`，用于把代理编译成独立二进制）、Xcode 命令行工具（`xcode-select --install`）。
+
+```bash
+npm run build:app
+```
+
+产物位于 `app/.build/`：
+
+- `LLMProxy.app` — 应用包
+- `LLMProxy-v{version}.dmg` — 拖拽安装镜像（挂载后带 Applications 快捷方式）
+
+本地安装：打开 DMG，把 `LLMProxy.app` 拖入 `/Applications`（替换旧版本），然后：
+
+```bash
+xattr -cr /Applications/LLMProxy.app   # 仅当 macOS 拦截未签名应用时需要
+```
+
+管理界面（含协议抓包轨迹视图）会作为单文件 HTML 打进应用，重新打包即可带上全部界面改动。
 
 ## FAQ
 
