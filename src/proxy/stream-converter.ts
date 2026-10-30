@@ -29,6 +29,24 @@ function ts(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${ms}`
 }
 
+/**
+ * 流式期间按 ≥1s 间隔增量写入 responseIn，供轨迹视图实时观察流是否停滞。
+ * 节流状态按转换器实例隔离；结束时的全量写入仍由各转换器自行负责。
+ */
+function makeThrottledResponseInWriter(
+  capture?: CaptureBuffer,
+  pairId?: number,
+): (rawLines: string[]) => void {
+  let lastAt = 0
+  return (rawLines: string[]) => {
+    if (!capture || pairId === undefined) return
+    const now = Date.now()
+    if (now - lastAt < 1000) return
+    lastAt = now
+    capture.updateRequest(pairId, 'responseIn', rawLines.join('\n\n'))
+  }
+}
+
 /** 从 thinking 内容生成确定性伪签名 */
 function makeSignature(thinkingText: string): string {
   return createHash('sha256').update(thinkingText).digest('hex').slice(0, 16)
@@ -62,6 +80,7 @@ export async function convertAnthropicStreamToOpenAI(
   let totalChunks = 0
   let thinkingChunks: string[] = []
   let rawLines: string[] = []
+  const pushResponseInCapture = makeThrottledResponseInWriter(capture, pairId)
   let outLines: string[] = []
   let anthropicUsage: Record<string, unknown> = {}
   let thinkingText = ''
@@ -93,6 +112,7 @@ export async function convertAnthropicStreamToOpenAI(
       let parsed: Record<string, unknown> | undefined
       try { parsed = JSON.parse(dataStr) } catch { continue }
       rawLines.push(`[${ts()}] data: ${dataStr}`)
+      pushResponseInCapture(rawLines)
 
       const innerType = (parsed?.type as string) ?? ''
 
@@ -247,6 +267,7 @@ export async function convertOpenAIStreamToAnthropic(
   let thinkingText = ''
   let thinkingChunks: string[] = []
   let rawLines: string[] = []
+  const pushResponseInCapture = makeThrottledResponseInWriter(capture, pairId)
   let outLines: string[] = []
   let lastUsage: Record<string, unknown> = {}
   let pendingStopReason: string | null = null
@@ -342,6 +363,7 @@ export async function convertOpenAIStreamToAnthropic(
       let parsed: Record<string, unknown>
       try { parsed = JSON.parse(dataStr) } catch { continue }
       rawLines.push(`[${ts()}] data: ${dataStr}`)
+      pushResponseInCapture(rawLines)
 
       // 部分模型在每个 chunk 都带 usage，提前捕获。
       // 标准 OpenAI 格式 usage 在顶层；部分上游（如 Kimi k3）嵌在 choices[0].usage。
@@ -527,6 +549,7 @@ export async function convertOpenAIResponsesStreamToAnthropic(
   let thinkingSignature = ''
   let thinkingChunks: string[] = []
   let rawLines: string[] = []
+  const pushResponseInCapture = makeThrottledResponseInWriter(capture, pairId)
   let outLines: string[] = []
   let lastUsage: StreamUsage | null = null
   let responsesHasToolCalls = false
@@ -603,6 +626,7 @@ export async function convertOpenAIResponsesStreamToAnthropic(
       let parsed: Record<string, unknown> | undefined
       try { parsed = JSON.parse(dataStr) } catch { continue }
       rawLines.push(`[${ts()}] data: ${dataStr}`)
+      pushResponseInCapture(rawLines)
 
       const innerType = (parsed?.type as string) ?? ''
 
@@ -900,6 +924,7 @@ export async function convertAnthropicStreamToOpenAIResponses(
   let thinkingChunks: string[] = []
   let thinkingStarted = false
   let rawLines: string[] = []
+  const pushResponseInCapture = makeThrottledResponseInWriter(capture, pairId)
   let outLines: string[] = []
 
   // Build namespace lookup table (CCX compat)
@@ -942,6 +967,7 @@ export async function convertAnthropicStreamToOpenAIResponses(
     let parsed: Record<string, unknown> | undefined
     try { parsed = JSON.parse(dataStr) } catch { return false }
     rawLines.push(`[${ts()}] data: ${dataStr}`)
+    pushResponseInCapture(rawLines)
 
     const innerType = (parsed?.type as string) ?? ''
 
@@ -1212,6 +1238,7 @@ export async function convertOpenAIStreamToOpenAIResponses(
   let buffer = ''
   let totalChunks = 0
   let rawLines: string[] = []
+  const pushResponseInCapture = makeThrottledResponseInWriter(capture, pairId)
   let outLines: string[] = []
   let lastUsage: Record<string, unknown> = {}
   let textContent = ''
@@ -1337,6 +1364,7 @@ export async function convertOpenAIStreamToOpenAIResponses(
       let parsed: Record<string, unknown>
       try { parsed = JSON.parse(dataStr) } catch { continue }
       rawLines.push(`[${ts()}] data: ${dataStr}`)
+      pushResponseInCapture(rawLines)
       totalChunks++
 
       // kimi-k2.6 sends usage in a separate chunk with empty choices
@@ -1486,6 +1514,7 @@ export async function convertOpenAIResponsesStreamToOpenAI(
   let buffer = ''
   let totalChunks = 0
   let rawLines: string[] = []
+  const pushResponseInCapture = makeThrottledResponseInWriter(capture, pairId)
   let outLines: string[] = []
   let lastUsage: Record<string, unknown> = {}
   let thinkingText = ''
@@ -1521,6 +1550,7 @@ export async function convertOpenAIResponsesStreamToOpenAI(
       let parsed: Record<string, unknown> | undefined
       try { parsed = JSON.parse(dataStr) } catch { continue }
       rawLines.push(`[${ts()}] data: ${dataStr}`)
+      pushResponseInCapture(rawLines)
 
       const innerType = (parsed?.type as string) ?? ''
 
