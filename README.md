@@ -280,6 +280,11 @@ Prerequisites: Node.js ≥ 20, [bun](https://bun.sh) (`brew install oven-sh/bun/
 npm run build:app
 ```
 
+Useful environment variables:
+
+- `APP_VERSION=0.33.0` — override the app version (defaults to `package.json`)
+- `DISABLE_UPDATE_CHECK=1` — compile out the in-app update check (launch auto-check, 5-minute timer, and the "Check for Updates" menu action)
+
 Artifacts in `app/.build/`:
 
 - `LLMProxy.app` — app bundle

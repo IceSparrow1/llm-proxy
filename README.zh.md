@@ -263,6 +263,11 @@ npm run build:app    # 构建 macOS .app + .dmg 安装包
 npm run build:app
 ```
 
+常用环境变量：
+
+- `APP_VERSION=0.33.0` — 覆盖应用版本号（默认取 package.json）
+- `DISABLE_UPDATE_CHECK=1` — 编译期关闭应用内更新检查（启动检查、5 分钟定时检查与「检查更新」菜单项）
+
 产物位于 `app/.build/`：
 
 - `LLMProxy.app` — 应用包
