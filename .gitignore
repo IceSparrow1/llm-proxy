@@ -20,3 +20,4 @@ src/types/i18n.generated.ts
 .compound-engineering/
 .idea/
 *.bun-build
+admin-ui.html
