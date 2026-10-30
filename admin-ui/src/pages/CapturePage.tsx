@@ -10,78 +10,17 @@ import {
   TableHead,
   TableCell,
 } from '@appica/ui-react/table'
-import { ClipboardCopy } from '@appica/icons-react'
-import JsonEditorPane from '../components/JsonEditorPane'
+import CaptureDetailDrawer, { type CaptureDetailMode } from '../components/CaptureDetailDrawer'
 import { adminFetch } from '../lib/api'
 import { useToast } from '../lib/toast'
-
-/* ────────────────────────── 类型 / 常量 ────────────────────────── */
-
-/** 后端 CaptureEntry（src/proxy/capture.ts）。 */
-interface CaptureEntry {
-  id: number
-  timestamp: number
-  durationMs: number | null
-  source: string
-  protocol: string
-  model: string
-  pairId: number
-  adapterName?: string
-  upstreamProvider?: string
-  upstreamProtocol?: string
-  upstreamModel?: string
-  requestIn: string | null
-  requestOut: string | null
-  responseIn: string | null
-  responseOut: string | null
-}
+import { fmtDuration, fmtSize, fmtTime, type CaptureEntry } from '../lib/capture'
 
 interface StatusRes {
   success?: boolean
   data?: { enabled?: boolean }
 }
 
-type PhaseKey = 'requestIn' | 'requestOut' | 'responseIn' | 'responseOut'
-
-/**
- * 四阶段定义（对齐旧版 capture.ts PHASES）。
- * 标签为旧版硬编码中文（locales 无对应 key，忠实迁移）；
- * 颜色由旧版 var(--success)/var(--accent) 映射到 Appica token 类。
- */
-const PHASES: Array<{ key: PhaseKey; label: string; cls: string; isStream: boolean }> = [
-  { key: 'requestIn', label: '客户端→代理', cls: 'text-success-emphasis', isStream: false },
-  { key: 'requestOut', label: '代理→上游', cls: 'text-primary-strong', isStream: false },
-  { key: 'responseIn', label: '上游→代理', cls: 'text-success-emphasis', isStream: true },
-  { key: 'responseOut', label: '代理→客户端', cls: 'text-primary-strong', isStream: true },
-]
-
 const MAX_ENTRIES = 200
-
-/* ────────────────────────── 工具 ────────────────────────── */
-
-function fmtTime(ts: number): string {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(
-    d.getMinutes(),
-  )}:${pad(d.getSeconds())}`
-}
-
-function fmtSize(s: string | null): string {
-  if (!s) return '0B'
-  const b = s.length
-  if (b > 1024) return (b / 1024).toFixed(1) + 'KB'
-  return b + 'B'
-}
-
-function fmtDuration(ms: number | null): string {
-  if (ms == null) return '—'
-  if (ms < 1000) return `${ms} ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`
-  const minutes = Math.floor(ms / 60_000)
-  const seconds = ((ms % 60_000) / 1000).toFixed(1)
-  return `${minutes}m ${seconds}s`
-}
 
 async function readSSE(
   response: Response,
@@ -127,16 +66,20 @@ async function readSSE(
  * Capture 页 — 移植自旧版 capture.ts：
  * - 启动/暂停/结束抓包（后端控制 + SSE 连接生命周期）
  * - 来源过滤、条目列表（pairId 合并、上限 200）
- * - 选中条目四阶段详情（request JSON 树形 / response 原始文本）+ 复制原始数据
+ * - 点击行 / 操作按钮从右侧弹出详情抽屉：轨迹模式（消息级 LLM 对话，
+ *   只解析请求体，进行中也可查看）与代理模式（四阶段报文卡片）
  */
 export default function CapturePage() {
   const { t } = useTranslation()
   const { toast } = useToast()
 
   const [entries, setEntries] = useState<CaptureEntry[]>([])
-  const [selectedId, setSelectedId] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
   const [sourceFilter, setSourceFilter] = useState('')
+  /** 详情抽屉：条目 id + 视图模式；null 关闭。 */
+  const [detail, setDetail] = useState<{ id: number; mode: CaptureDetailMode } | null>(null)
+  // 行点击沿用上次使用的视图模式（首次为轨迹模式）。
+  const lastModeRef = useRef<CaptureDetailMode>('trajectory')
   const abortRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(true)
 
@@ -173,7 +116,7 @@ export default function CapturePage() {
     abortRef.current = ac
     setRunning(true)
     setEntries([])
-    setSelectedId(null)
+    setDetail(null)
 
     // 历史数据（可中止）
     adminFetch('/admin/debug/captures', { signal: ac.signal })
@@ -282,8 +225,25 @@ export default function CapturePage() {
     abortRef.current?.abort()
     abortRef.current = null
     setEntries([])
-    setSelectedId(null)
+    setDetail(null)
   }
+
+  /* ──── 详情抽屉 ──── */
+
+  const openDetail = (id: number, mode: CaptureDetailMode) => {
+    lastModeRef.current = mode
+    setDetail({ id, mode })
+  }
+
+  const changeMode = (mode: CaptureDetailMode) => {
+    lastModeRef.current = mode
+    setDetail((cur) => (cur ? { ...cur, mode } : cur))
+  }
+
+  const detailEntry = useMemo(
+    () => (detail == null ? null : entries.find((e) => e.id === detail.id) ?? null),
+    [entries, detail],
+  )
 
   /* ──── 派生数据 ──── */
 
@@ -296,23 +256,6 @@ export default function CapturePage() {
     () => (sourceFilter ? entries.filter((e) => e.source === sourceFilter) : entries),
     [entries, sourceFilter],
   )
-
-  const selected = useMemo(
-    () => (selectedId == null ? null : entries.find((e) => e.id === selectedId) ?? null),
-    [entries, selectedId],
-  )
-
-  const toggleSelect = (id: number) => {
-    setSelectedId((cur) => (cur === id ? null : id))
-  }
-
-  const copyRaw = (raw: string | null) => {
-    if (raw == null) return
-    navigator.clipboard.writeText(raw).catch((err) => {
-      console.warn('[capture] 复制失败', err)
-      toast(t('admin.common.copyFailed'), 'error')
-    })
-  }
 
   /* ──── 渲染 ──── */
 
@@ -392,16 +335,15 @@ export default function CapturePage() {
               <TableHead>{t('admin.capture.upstreamModel')}</TableHead>
               <TableHead className="text-end">{t('admin.capture.requestSize')}</TableHead>
               <TableHead className="text-end">{t('admin.capture.responseSize')}</TableHead>
+              <TableHead className="text-end">{t('admin.capture.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map((e) => (
               <TableRow
                 key={e.id}
-                onClick={() => toggleSelect(e.id)}
-                className={
-                  'cursor-pointer ' + (selectedId === e.id ? 'bg-background-muted' : '')
-                }
+                onClick={() => openDetail(e.id, lastModeRef.current)}
+                className="cursor-pointer"
               >
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{e.id}</TableCell>
                 <TableCell className="font-mono text-[10.5px] whitespace-nowrap text-muted-foreground">
@@ -431,12 +373,32 @@ export default function CapturePage() {
                   <span className="text-muted-foreground"> / </span>
                   <span className="text-primary-strong">{fmtSize(e.responseOut)}</span>
                 </TableCell>
+                <TableCell onClick={(ev) => ev.stopPropagation()}>
+                  <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      className="bg-primary-soft text-primary-strong"
+                      onClick={() => openDetail(e.id, 'proxy')}
+                    >
+                      {t('admin.capture.viewProxy')}
+                    </Button>
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      className="bg-secondary-soft text-secondary-emphasis"
+                      onClick={() => openDetail(e.id, 'trajectory')}
+                    >
+                      {t('admin.capture.viewTrajectory')}
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
 
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={12} className="py-12 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={13} className="py-12 text-center text-[13px] text-muted-foreground">
                   {t('admin.capture.empty')}
                 </TableCell>
               </TableRow>
@@ -445,36 +407,13 @@ export default function CapturePage() {
         </Table>
       </div>
 
-      {/* 四阶段详情 */}
-      {selected && (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {PHASES.map((p) => (
-            <div
-              key={p.key}
-              className="overflow-hidden rounded-md border border-border bg-background-subtle"
-            >
-              <div className="flex items-center gap-2 border-b border-border bg-background px-3 py-2">
-                <span className={'text-[12px] font-semibold ' + p.cls}>{p.label}</span>
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  {fmtSize(selected[p.key])}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyRaw(selected[p.key])}
-                  aria-label={t('admin.capture.copyRaw')}
-                  title={t('admin.capture.copyRaw')}
-                  className="ms-auto cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <ClipboardCopy className="size-3.5" />
-                </button>
-              </div>
-              <div className="max-h-100 overflow-auto">
-                <JsonEditorPane data={selected[p.key]} isStream={p.isStream} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 详情抽屉：从右往左滑出，展示选中请求详情 */}
+      <CaptureDetailDrawer
+        entry={detailEntry}
+        mode={detail?.mode ?? 'proxy'}
+        onModeChange={changeMode}
+        onClose={() => setDetail(null)}
+      />
     </div>
   )
 }
