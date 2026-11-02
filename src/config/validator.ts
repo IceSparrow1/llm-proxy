@@ -15,6 +15,9 @@ export function validateConfig(config: Config): ValidationError[] {
       errors.push({ field: 'port', message: 'port 必须为 1-65535 之间的整数' })
     }
   }
+  if (config.host != null && config.host !== '' && !['127.0.0.1', '0.0.0.0'].includes(config.host)) {
+    errors.push({ field: 'host', message: 'host 仅支持 127.0.0.1 或 0.0.0.0' })
+  }
   return errors
 }
 

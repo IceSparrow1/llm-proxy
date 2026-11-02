@@ -208,7 +208,7 @@ export async function cmdStart(opts: StartOptions): Promise<void> {
     : 'info'
   const level = persistedLevel ?? defaultLevel
   const logger = new Logger(1000, logDir, level)
-  const host = opts.host ?? DEFAULT_HOST
+  const host = opts.host ?? store.getConfig().config.host ?? DEFAULT_HOST
   const configPort = store.getConfig().config.port
   const port = opts.port ?? configPort ?? DEFAULT_PORT
 

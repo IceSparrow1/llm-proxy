@@ -4,11 +4,16 @@ import { t } from '../../lib/i18n.js'
 import { json } from './index.js'
 import { getProviderPrimaryType } from '../../config/types.js'
 
-function rebindPortAfterResponse(ctx: ServerContext, res: ServerResponse, port: number): void {
+function rebindPortAfterResponse(
+  ctx: ServerContext,
+  res: ServerResponse,
+  port?: number,
+  host?: string,
+): void {
   if (!ctx.rebindPort) return
   const rebind = () => {
-    void ctx.rebindPort!(port).catch((error) => {
-      ctx.logger.log('system', 'Config port hot reload failed', { port, error: String(error) }, 'error')
+    void ctx.rebindPort!(port, host).catch((error) => {
+      ctx.logger.log('system', 'Config port hot reload failed', { port, host, error: String(error) }, 'error')
     })
   }
   if (res.writableFinished) queueMicrotask(rebind)
@@ -56,7 +61,7 @@ export async function handleReload(ctx: ServerContext, _req: IncomingMessage, re
     ctx.changeLocale?.(config.locale ?? 'en')
     ctx.logger.log('system', t('backend.config.reloadSuccess'), { version: result.version })
     json(res, 200, { success: true, data: { version: result.version } })
-    rebindPortAfterResponse(ctx, res, config.port ?? 9000)
+    rebindPortAfterResponse(ctx, res, config.port, config.host)
   } else {
     ctx.logger.log('system', t('backend.config.reloadFailed'), { errors: result.errors })
     json(res, 400, { success: false, error: t('backend.config.validationFailed'), errors: result.errors })
@@ -137,17 +142,61 @@ export async function handleSetPort(ctx: ServerContext, req: IncomingMessage, re
     return
   }
   const { config } = ctx.store.getConfig()
+  // 先响应再重绑（重绑会断开连接）；config 在重绑成功后写入，
+  // 保证 config.yaml 始终与实际监听配置一致，失败时保留原配置。
+  json(res, 200, { success: true, data: { port: port || undefined } })
+  const apply = async () => {
+    try {
+      if (ctx.rebindPort) await ctx.rebindPort(port ?? 9000)
+      const { config: fresh } = ctx.store.getConfig()
+      const newConfig = structuredClone(fresh)
+      newConfig.port = port || undefined
+      await ctx.store.writeConfig(newConfig)
+      ctx.logger.log('system', `Port changed to ${port ?? 'default (9000)'} (hot reloaded)`)
+    } catch (error) {
+      ctx.logger.log('system', 'Port hot reload failed', { port, error: String(error) }, 'error')
+    }
+  }
+  if (res.writableFinished) void apply()
+  else res.once('finish', apply)
+}
+
+export function handleGetHost(ctx: ServerContext, _req: IncomingMessage, res: ServerResponse): void {
+  const { config } = ctx.store.getConfig()
+  const host = config.host ?? '127.0.0.1'
+  json(res, 200, { success: true, data: { host, lanEnabled: host === '0.0.0.0' } })
+}
+
+export async function handleSetHost(ctx: ServerContext, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = JSON.parse(await (await import('../../lib/http-utils.js')).readBody(req))
+  const host = body.host
+  if (host !== '127.0.0.1' && host !== '0.0.0.0') {
+    json(res, 400, { success: false, error: 'Host must be 127.0.0.1 or 0.0.0.0' })
+    return
+  }
+  const { config } = ctx.store.getConfig()
   const newConfig = structuredClone(config)
-  newConfig.port = port || undefined
-  await ctx.store.writeConfig(newConfig)
-  ctx.logger.log('system', `Port changed to ${port ?? 'default (9000)'} (hot reloaded)`)
-  json(res, 200, { success: true, data: { port: newConfig.port } })
-  rebindPortAfterResponse(ctx, res, port ?? 9000)
+  newConfig.host = host
+  // 先响应再重绑（重绑会断开连接）；config 在重绑成功后写入，
+  // 保证 config.yaml 始终与实际监听地址一致，失败时保留原配置。
+  json(res, 200, { success: true, data: { host, lanEnabled: host === '0.0.0.0' } })
+  const apply = async () => {
+    try {
+      if (ctx.rebindPort) await ctx.rebindPort(undefined, host)
+      await ctx.store.writeConfig(newConfig)
+      ctx.logger.log('system', `Listen host changed to ${host} (hot reloaded)`)
+    } catch (error) {
+      ctx.logger.log('system', 'Listen host hot reload failed', { host, error: String(error) }, 'error')
+    }
+  }
+  if (res.writableFinished) void apply()
+  else res.once('finish', apply)
 }
 
 export function handleGetProxyKey(_ctx: ServerContext, _req: IncomingMessage, res: ServerResponse): void {
+  // 个人本地工具：管理 API 已有管理员密钥保护，直接返回真实 key 供页面查看/复制
   const { config } = _ctx.store.getConfig()
-  json(res, 200, { success: true, data: { set: !!config.proxyKey, key: config.proxyKey ? '***' : null } })
+  json(res, 200, { success: true, data: { set: !!config.proxyKey, key: config.proxyKey ?? null } })
 }
 
 export async function handleSetProxyKey(ctx: ServerContext, req: IncomingMessage, res: ServerResponse): Promise<void> {

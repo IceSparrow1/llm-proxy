@@ -83,6 +83,7 @@ export function loadConfigFromYaml(filePath: string): Config {
     logLevel: (['debug','info','warn','error'].includes(interpolated.log_level as string) ? interpolated.log_level : undefined) as Config['logLevel'],
     locale: interpolated.locale,
     port: interpolated.port,
+    host: interpolated.host,
     captureMaxSize: interpolated.capture_max_size,
   }
 }
@@ -128,6 +129,7 @@ export function serializeConfigToYaml(config: Config): string {
     log_level: config.logLevel,
     locale: config.locale,
     port: config.port,
+    host: config.host,
     capture_max_size: config.captureMaxSize,
   }
   return stringifyYaml(file)

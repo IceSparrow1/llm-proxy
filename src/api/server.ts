@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
-import { AdminHandoffStore, handleCreateAdminHandoff, handleExchangeAdminHandoff, handleGetConfig, handleReload, handleHealth, handleStatus, handleGetLogs, handleGetLogLevel, handleSetLogLevel, handleGetLocale, handleSetLocale, handleGetPort, handleSetPort, handleGetAdapters, handleCreateProvider, handleUpdateProvider, handleDeleteProvider, handleCreateAdapter, handleUpdateAdapter, handleDeleteAdapter, handleTestModel, handleTestAdapter, handleListModels, handlePullModels, handleGetProxyKey, handleSetProxyKey, handleGetTokenStats, handleGetTokenTimeline, handleGetTokenBreakdown, handleGetTokenDbInfo, handlePostTokenCleanup, handleDebugCapturesStatus, handleDebugCaptures, handleDebugCapturesControl, handleDebugCapturesStream, handleGetVision, handleSetVision, handleGetVisionCacheStats, handleClearVisionCache } from './handlers/index.js'
+import { AdminHandoffStore, handleCreateAdminHandoff, handleExchangeAdminHandoff, handleGetConfig, handleReload, handleHealth, handleStatus, handleGetLogs, handleGetLogLevel, handleSetLogLevel, handleGetLocale, handleSetLocale, handleGetPort, handleSetPort, handleGetHost, handleSetHost, handleGetAdapters, handleCreateProvider, handleUpdateProvider, handleDeleteProvider, handleCreateAdapter, handleUpdateAdapter, handleDeleteAdapter, handleTestModel, handleTestAdapter, handleListModels, handlePullModels, handleGetProxyKey, handleSetProxyKey, handleGetTokenStats, handleGetTokenTimeline, handleGetTokenBreakdown, handleGetTokenDbInfo, handlePostTokenCleanup, handleDebugCapturesStatus, handleDebugCaptures, handleDebugCapturesControl, handleDebugCapturesStream, handleGetVision, handleSetVision, handleGetVisionCacheStats, handleClearVisionCache } from './handlers/index.js'
 import { handleAnthropicMessages, handleOpenAIChat, handleOpenAIResponses } from '../proxy/handlers.js'
 import { handleAdapterRequest, handleAdapterModels } from '../adapter/handlers.js'
 import { handleAdapterImageRequest } from '../adapter/image-handlers.js'
@@ -22,8 +22,8 @@ export interface ServerContext {
   logger: Logger
   capture?: CaptureBuffer
   visionCache?: VisionCache
-  /** 配置端口变化后的服务内重绑定。 */
-  rebindPort?: (port: number) => Promise<void>
+  /** 配置端口/监听地址变化后的服务内重绑定；port/host 缺省分别保持当前值（实例可能以 --port 启动，实际端口 ≠ config.port）。 */
+  rebindPort?: (port?: number, host?: string) => Promise<void>
   /** 配置语言变化后的后端运行时同步。 */
   changeLocale?: (locale: string) => void
   adminHandoffs: AdminHandoffStore
@@ -90,6 +90,8 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: /^\/admin\/locale$/, handler: handleGetLocale },
   { method: 'PUT', pattern: /^\/admin\/locale$/, handler: handleSetLocale },
   { method: 'GET', pattern: /^\/admin\/port$/, handler: handleGetPort },
+  { method: 'GET', pattern: /^\/admin\/host$/, handler: handleGetHost },
+  { method: 'PUT', pattern: /^\/admin\/host$/, handler: handleSetHost },
   { method: 'PUT', pattern: /^\/admin\/port$/, handler: handleSetPort },
   { method: 'GET', pattern: /^\/admin\/vision$/, handler: handleGetVision },
   { method: 'PUT', pattern: /^\/admin\/vision$/, handler: handleSetVision },
@@ -154,9 +156,10 @@ function hasValidAdminKey(req: IncomingMessage, expectedKey: string): boolean {
 export function createProxyServer(opts: ServerOptions): Server {
   let server: Server
   let currentPort = opts.proxyPort
+  let currentHost = opts.proxyHost
   let rebindQueue: Promise<void> = Promise.resolve()
 
-  const listen = (port: number): Promise<void> => new Promise((resolve, reject) => {
+  const listen = (port: number, host: string): Promise<void> => new Promise((resolve, reject) => {
     const onError = (err: Error) => {
       server.off('listening', onListening)
       reject(err)
@@ -167,8 +170,22 @@ export function createProxyServer(opts: ServerOptions): Server {
     }
     server.once('error', onError)
     server.once('listening', onListening)
-    server.listen(port, opts.proxyHost)
+    server.listen(port, host)
   })
+
+  // 收窄/放宽监听地址（如 0.0.0.0 ↔ 127.0.0.1）时，旧连接的 TIME_WAIT 可能短暂占用
+  // 新地址，对 EADDRINUSE 做 250ms 间隔的有限重试。
+  const listenWithRetry = async (port: number, host: string): Promise<void> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await listen(port, host)
+        return
+      } catch (error) {
+        if (attempt >= 2 || (error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+    }
+  }
 
   const close = (): Promise<void> => new Promise((resolve, reject) => {
     if (!server.listening) {
@@ -177,22 +194,31 @@ export function createProxyServer(opts: ServerOptions): Server {
     }
     server.close((err) => err ? reject(err) : resolve())
     server.closeIdleConnections?.()
+    // 管理页的抓包 SSE 长连接不是 idle，会卡住 close()；重绑场景直接断开，
+    // 客户端（抓包 SSE 客户端每 1s 自动重连）会自行恢复。
+    server.closeAllConnections?.()
   })
 
-  const rebindPort = (port: number): Promise<void> => {
+  const rebindPort = (port?: number, host?: string): Promise<void> => {
     const task = rebindQueue.then(async () => {
-      if (currentPort === port && server.listening) return
+      // 实例可能以 --port 启动：port/host 缺省时保持当前值，而不是回退到 config 值
+      const targetPort = port ?? currentPort
+      const targetHost = host ?? currentHost
+      if (currentPort === targetPort && currentHost === targetHost && server.listening) return
       const previousPort = currentPort
+      const previousHost = currentHost
       await close()
       try {
-        await listen(port)
-        currentPort = port
-        opts.onPortChanged?.(port)
+        await listenWithRetry(targetPort, targetHost)
+        currentPort = targetPort
+        currentHost = targetHost
+        opts.onPortChanged?.(targetPort)
       } catch (error) {
-        // 新端口不可用时尽力恢复旧端口，避免服务因配置错误完全离线。
+        // 新监听配置不可用时尽力恢复旧配置，避免服务因配置错误完全离线。
         try {
-          await listen(previousPort)
+          await listenWithRetry(previousPort, previousHost)
           currentPort = previousPort
+          currentHost = previousHost
         } catch {
           // 保留原始错误，交由调用方记录。
         }
