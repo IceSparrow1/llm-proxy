@@ -31,7 +31,11 @@
       "theme": "Theme",
       "themeSystem": "System",
       "themeLight": "Light",
-      "themeDark": "Dark"
+      "themeDark": "Dark",
+      "lanProxy": "LAN Proxy",
+      "lanProxyHint": "Listen on 0.0.0.0 so LAN devices can reach the proxy and admin UI (both still require keys); set a proxy API key first. Off = 127.0.0.1 only.",
+      "lanOnSuccess": "LAN proxy enabled (0.0.0.0)",
+      "lanOffSuccess": "LAN proxy disabled (127.0.0.1 only)"
     },
     "managementKey": {
       "title": "Management API Key",
@@ -128,7 +132,11 @@
         "cacheCreate": "Cache Create",
         "total": "Total",
         "requests": "Requests"
-      }
+      },
+      "proxyKeyGenerate": "Generate",
+      "proxyKeyGenerateSuccess": "New random key generated",
+      "proxyKeyCopied": "Key copied to clipboard",
+      "proxyKeyManualPlaceholder": "Enter a custom key (to match client configs)"
     },
     "logs": {
       "title": "Logs",

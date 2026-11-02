@@ -31,7 +31,11 @@
       "theme": "主题",
       "themeSystem": "跟随系统",
       "themeLight": "浅色",
-      "themeDark": "深色"
+      "themeDark": "深色",
+      "lanProxy": "局域网代理",
+      "lanProxyHint": "开启后监听 0.0.0.0，局域网设备可访问代理与管理界面（均需密钥认证）；开启前建议先设置代理 API Key。关闭仅监听 127.0.0.1。",
+      "lanOnSuccess": "已开启局域网代理 (0.0.0.0)",
+      "lanOffSuccess": "已关闭局域网代理 (仅 127.0.0.1)"
     },
     "managementKey": {
       "title": "管理 API Key",
@@ -128,7 +132,11 @@
         "cacheCreate": "缓存创建",
         "total": "总计",
         "requests": "请求数"
-      }
+      },
+      "proxyKeyGenerate": "随机生成",
+      "proxyKeyGenerateSuccess": "已生成新的随机密钥",
+      "proxyKeyCopied": "密钥已复制到剪贴板",
+      "proxyKeyManualPlaceholder": "手动输入密钥（需与客户端配置一致时使用）"
     },
     "logs": {
       "title": "日志",

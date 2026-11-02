@@ -11,7 +11,7 @@ import { Button } from '@appica/ui-react/button'
 import { Input } from '@appica/ui-react/input'
 import { Textarea } from '@appica/ui-react/textarea'
 import { Switch } from '@appica/ui-react/switch'
-import { Eye, EyeOff, Refresh } from '@appica/icons-react'
+import { ClipboardCopy, Eye, EyeOff, Refresh } from '@appica/icons-react'
 import { useTheme } from '@appica/ui-react/hooks/use-theme'
 import {
   ADMIN_KEY_CHANGED_EVENT,
@@ -143,6 +143,7 @@ function ServiceRuntimeCard() {
     <Card icon="🖥️" title={t('admin.general.serviceTitle')} desc={t('admin.general.serviceDesc')}>
       <div className="flex flex-col gap-3">
         <PortSetting />
+        <LanSetting />
         <div className="flex items-center justify-between gap-3">
           <span className="text-[13px] text-foreground">{t('admin.common.reloadConfig')}</span>
           <Button variant="ghost" size="sm" onClick={() => void handleReload()}>
@@ -152,6 +153,65 @@ function ServiceRuntimeCard() {
         </div>
       </div>
     </Card>
+  )
+}
+
+/**
+ * 局域网代理开关（设置页-当前服务运行配置卡片）。
+ * GET/PUT /admin/host：开启 = 监听 0.0.0.0（局域网可访问），关闭 = 仅 127.0.0.1。
+ * 切换会热重绑监听地址，当前页面经 127.0.0.1 访问不受影响。
+ */
+function LanSetting() {
+  const { t } = useTranslation()
+  const { toast } = useToast()
+  const [lanEnabled, setLanEnabled] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    const res = await fetchJson<ApiRes<{ lanEnabled?: boolean }>>('/admin/host').catch((err) => {
+      console.warn('[lan-setting] host 状态加载失败', err)
+      return null
+    })
+    setLanEnabled(res?.data?.lanEnabled ?? false)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const toggle = async (on: boolean) => {
+    setSaving(true)
+    const res = await fetchJson<ApiRes<{ lanEnabled?: boolean }>>('/admin/host', {
+      method: 'PUT',
+      body: JSON.stringify({ host: on ? '0.0.0.0' : '127.0.0.1' }),
+    }).catch((err) => {
+      console.warn('[lan-setting] host 保存失败', err)
+      return null
+    })
+    setSaving(false)
+    if (res?.success) {
+      setLanEnabled(on)
+      toast(on ? t('admin.general.lanOnSuccess') : t('admin.general.lanOffSuccess'), 'success')
+    } else {
+      toast(t('admin.common.requestFailed'), 'error')
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-[13px] text-foreground">
+          {t('admin.general.lanProxy')}
+          <span className="font-mono text-[10.5px] text-muted-foreground">
+            {lanEnabled ? '0.0.0.0' : '127.0.0.1'}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          {t('admin.general.lanProxyHint')}
+        </p>
+      </div>
+      <Switch checked={lanEnabled} onCheckedChange={(c) => void toggle(c === true)} disabled={saving} />
+    </div>
   )
 }
 
@@ -239,17 +299,19 @@ function AdminKeyCard() {
 function ProxyKeyCard() {
   const { t } = useTranslation()
   const { toast } = useToast()
-  const [key, setKey] = useState('')
+  const [currentKey, setCurrentKey] = useState('')
   const [hasKey, setHasKey] = useState(false)
+  const [manualKey, setManualKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [showKey, setShowKey] = useState(false)
 
   const load = useCallback(async () => {
-    const res = await fetchJson<ApiRes<{ set?: boolean }>>('/admin/proxy-key').catch((err) => {
+    const res = await fetchJson<ApiRes<{ set?: boolean; key?: string | null }>>('/admin/proxy-key').catch((err) => {
       console.warn('[settings] proxy-key 状态加载失败', err)
       toast(t('admin.common.requestFailed'), 'error')
       return null
     })
+    setCurrentKey(res?.data?.key ?? '')
     setHasKey(res?.data?.set ?? false)
   }, [t, toast])
 
@@ -268,13 +330,28 @@ function ProxyKeyCard() {
     })
     setSaving(false)
     if (res?.success) {
+      setCurrentKey(value)
       setHasKey(!!value)
       toast(value ? t('admin.dashboard.proxyKeySetSuccess') : t('admin.dashboard.proxyKeyRemoveSuccess'), 'success')
-      setKey('')
+      setManualKey('')
       void load()
     } else {
       toast(t('admin.common.requestFailed'), 'error')
     }
+  }
+
+  // 随机生成 48 位十六进制密钥（Web Crypto 本地生成，不经网络）
+  const generate = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(24))
+    const key = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+    void save(key)
+  }
+
+  const copy = () => {
+    navigator.clipboard
+      .writeText(currentKey)
+      .then(() => toast(t('admin.dashboard.proxyKeyCopied'), 'success'))
+      .catch((err) => console.warn('[settings] proxy-key 复制失败', err))
   }
 
   return (
@@ -283,38 +360,76 @@ function ProxyKeyCard() {
       title={t('admin.dashboard.proxyKey')}
       desc={hasKey ? t('admin.dashboard.proxyKeySet') : t('admin.dashboard.proxyKeyNotSet')}
     >
-      <div className="flex items-center gap-2">
-        <Input
-          type={showKey ? 'text' : 'password'}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder={t('admin.dashboard.proxyKeyPlaceholder')}
-          inputSize="sm"
-          className="flex-1 font-mono"
-          autoComplete="off"
-        />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={showKey ? t('admin.common.hide') : t('admin.common.view')}
-          onClick={() => setShowKey((s) => !s)}
-        >
-          {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-        </Button>
-        <Button variant="primary" size="sm" disabled={saving} onClick={() => void save(key)}>
-          {t('admin.common.save')}
-        </Button>
-        {hasKey && (
+      <div className="flex flex-col gap-2.5">
+        {/* 当前密钥：查看 / 复制 */}
+        <div className="flex items-center gap-2">
+          <Input
+            type={showKey ? 'text' : 'password'}
+            value={currentKey}
+            readOnly
+            placeholder="—"
+            inputSize="sm"
+            className="flex-1 font-mono"
+            onFocus={(e) => e.currentTarget.select()}
+          />
           <Button
             variant="ghost"
-            size="sm"
-            disabled={saving}
-            className="text-error-emphasis hover:bg-error-soft"
-            onClick={() => void save('')}
+            size="icon-sm"
+            aria-label={showKey ? t('admin.common.hide') : t('admin.common.view')}
+            onClick={() => setShowKey((s) => !s)}
+            disabled={!hasKey}
           >
-            {t('admin.common.remove')}
+            {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </Button>
-        )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('admin.common.copy')}
+            title={t('admin.common.copy')}
+            onClick={copy}
+            disabled={!hasKey}
+          >
+            <ClipboardCopy className="size-4" />
+          </Button>
+        </div>
+        {/* 随机生成 / 移除 */}
+        <div className="flex items-center gap-2">
+          <Button variant="soft" size="sm" disabled={saving} onClick={generate}>
+            <Refresh data-icon="start" className="size-3.5" />
+            {t('admin.dashboard.proxyKeyGenerate')}
+          </Button>
+          {hasKey && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              className="text-error-emphasis hover:bg-error-soft"
+              onClick={() => void save('')}
+            >
+              {t('admin.common.remove')}
+            </Button>
+          )}
+        </div>
+        {/* 手动设置特定密钥（如需与客户端配置保持一致） */}
+        <div className="flex items-center gap-2">
+          <Input
+            type="text"
+            value={manualKey}
+            onChange={(e) => setManualKey(e.target.value)}
+            placeholder={t('admin.dashboard.proxyKeyManualPlaceholder')}
+            inputSize="sm"
+            className="flex-1 font-mono"
+            autoComplete="off"
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={saving || !manualKey}
+            onClick={() => void save(manualKey)}
+          >
+            {t('admin.common.save')}
+          </Button>
+        </div>
       </div>
     </Card>
   )
