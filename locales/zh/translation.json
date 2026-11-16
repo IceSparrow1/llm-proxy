@@ -386,7 +386,7 @@
       "tagToolCall": "工具调用中",
       "parseFailedHint": "无法将请求体解析为消息列表，可切换「代理模式」查看原始报文",
       "loopTurnBadge": "第 {{turn}} 轮",
-      "loopTurnShort": "L{{turn}}",
+      "turnCount": "轮次",
       "loopMetaLabel": "Agent Loop",
       "loopMetaValue": "第 {{turn}} 轮 / 共 {{count}} 次请求",
       "loopIdLabel": "Loop ID",

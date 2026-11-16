@@ -386,7 +386,7 @@
       "tagToolCall": "Tool call",
       "parseFailedHint": "Could not parse the request body into messages — switch to Proxy View for the raw payloads",
       "loopTurnBadge": "Turn {{turn}}",
-      "loopTurnShort": "L{{turn}}",
+      "turnCount": "Turns",
       "loopMetaLabel": "Agent loop",
       "loopMetaValue": "turn {{turn}} of {{count}} requests",
       "loopIdLabel": "Loop ID",

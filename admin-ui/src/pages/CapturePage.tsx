@@ -181,9 +181,23 @@ export default function CapturePage() {
     void stream()
   }, [t, toast])
 
-  // 进入页面：查询后端状态，已启用则自动连接；卸载时中止 fetch + 关闭 SSE。
+  /** 仅加载后端当前缓冲的历史条目（不含 SSE）。重启后抓包开关默认关闭，历史仍应可见。 */
+  const loadHistory = useCallback(() => {
+    adminFetch('/admin/debug/captures')
+      .then((r) => {
+        if (!r.ok) throw new Error(`Capture history failed: ${r.status}`)
+        return r.json()
+      })
+      .then((d: { success?: boolean; data?: CaptureEntry[] }) => {
+        if (d.success && mountedRef.current) setEntries(d.data ?? [])
+      })
+      .catch((err) => console.warn('[capture] 历史数据加载失败', err))
+  }, [])
+
+  // 进入页面：无条件加载历史；后端已启用则自动连接 SSE。卸载时中止 fetch + 关闭 SSE。
   useEffect(() => {
     const ac = new AbortController()
+    loadHistory()
     adminFetch('/admin/debug/captures/status', { signal: ac.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`Capture status failed: ${r.status}`)
@@ -201,7 +215,7 @@ export default function CapturePage() {
       ac.abort()
       abortRef.current?.abort()
     }
-  }, [connectSSE, t, toast])
+  }, [connectSSE, loadHistory, t, toast])
 
   /* ──── 控制按钮 ──── */
 
@@ -325,6 +339,7 @@ export default function CapturePage() {
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               <TableHead className="w-28">{t('admin.capture.loopIdLabel')}</TableHead>
+              <TableHead className="w-16">{t('admin.capture.turnCount')}</TableHead>
               <TableHead className="w-20">{t('admin.capture.status')}</TableHead>
               <TableHead className="w-32">{t('admin.capture.startTime')}</TableHead>
               <TableHead className="w-32">{t('admin.capture.endTime')}</TableHead>
@@ -333,9 +348,6 @@ export default function CapturePage() {
               <TableHead>{t('admin.capture.adapter')}</TableHead>
               <TableHead>{t('admin.capture.inboundProtocol')}</TableHead>
               <TableHead>{t('admin.capture.inboundModel')}</TableHead>
-              <TableHead>{t('admin.capture.upstreamProvider')}</TableHead>
-              <TableHead>{t('admin.capture.upstreamProtocol')}</TableHead>
-              <TableHead>{t('admin.capture.upstreamModel')}</TableHead>
               <TableHead className="text-end">{t('admin.capture.requestSize')}</TableHead>
               <TableHead className="text-end">{t('admin.capture.responseSize')}</TableHead>
               <TableHead className="text-end">{t('admin.capture.actions')}</TableHead>
@@ -372,6 +384,9 @@ export default function CapturePage() {
                   }
                 >
                   {e.loop?.uid ? e.loop.uid.slice(0, 8) : '—'}
+                </TableCell>
+                <TableCell className="font-mono text-[11px] whitespace-nowrap text-muted-foreground">
+                  {e.loop ? e.loop.turn : '—'}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <span
@@ -411,21 +426,6 @@ export default function CapturePage() {
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{e.protocol}</TableCell>
                 <TableCell className="font-mono text-[11px] whitespace-nowrap text-muted-foreground">
                   {e.model}
-                  {e.loop && (
-                    <span
-                      className="ms-1.5 inline-flex h-[17px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
-                      title={t('admin.capture.loopTurnBadge', { turn: e.loop.turn })}
-                    >
-                      {t('admin.capture.loopTurnShort', { turn: e.loop.turn })}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-[11.5px] text-muted-foreground">{e.upstreamProvider || '—'}</TableCell>
-                <TableCell className="font-mono text-[11px] text-muted-foreground">
-                  {e.upstreamProtocol || '—'}
-                </TableCell>
-                <TableCell className="font-mono text-[11px] text-muted-foreground">
-                  {e.upstreamModel || '—'}
                 </TableCell>
                 <TableCell className="text-end font-mono text-[10.5px] whitespace-nowrap">
                   <span className="text-success-emphasis">{fmtSize(e.requestIn)}</span>
@@ -463,7 +463,7 @@ export default function CapturePage() {
 
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={16} className="py-12 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={14} className="py-12 text-center text-[13px] text-muted-foreground">
                   {t('admin.capture.empty')}
                 </TableCell>
               </TableRow>
