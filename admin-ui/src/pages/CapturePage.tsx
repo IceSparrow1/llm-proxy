@@ -324,7 +324,10 @@ export default function CapturePage() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">#</TableHead>
-              <TableHead className="w-40">{t('admin.capture.time')}</TableHead>
+              <TableHead className="w-28">{t('admin.capture.loopIdLabel')}</TableHead>
+              <TableHead className="w-20">{t('admin.capture.status')}</TableHead>
+              <TableHead className="w-32">{t('admin.capture.startTime')}</TableHead>
+              <TableHead className="w-32">{t('admin.capture.endTime')}</TableHead>
               <TableHead className="text-end">{t('admin.capture.duration')}</TableHead>
               <TableHead>{t('admin.capture.sourceCol')}</TableHead>
               <TableHead>{t('admin.capture.adapter')}</TableHead>
@@ -339,7 +342,11 @@ export default function CapturePage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((e) => (
+            {filtered.map((e) => {
+              const startAt = e.loop ? (e.loop.startedAt ?? e.loop.turnTimes[0] ?? e.timestamp) : e.timestamp
+              const endAt = e.loop ? e.loop.lastReplyAt : (e.durationMs != null ? e.timestamp + e.durationMs : null)
+              const finished = e.durationMs != null
+              return (
               <TableRow
                 key={e.id}
                 onClick={() => openDetail(e.id, lastModeRef.current)}
@@ -347,14 +354,54 @@ export default function CapturePage() {
               >
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{e.id}</TableCell>
                 <TableCell
-                  className="font-mono text-[10.5px] whitespace-nowrap text-muted-foreground"
-                  title={
-                    e.loop
-                      ? `${t('admin.capture.loopSpanLabel')}: ${fmtTimeMs(e.loop.startedAt ?? e.loop.turnTimes[0] ?? e.timestamp)} → ${e.loop.lastReplyAt ? fmtTimeMs(e.loop.lastReplyAt) : '…'}`
+                  className={
+                    'font-mono text-[11px] whitespace-nowrap ' +
+                    (e.loop?.uid ? 'cursor-pointer text-primary-strong hover:underline' : 'text-muted-foreground')
+                  }
+                  title={e.loop?.uid ? `${t('admin.capture.loopIdLabel')} ${e.loop.uid}（${t('admin.capture.loopIdCopyHint')}）` : undefined}
+                  onClick={
+                    e.loop?.uid
+                      ? (ev) => {
+                          ev.stopPropagation()
+                          navigator.clipboard
+                            ?.writeText(e.loop!.uid!)
+                            .then(() => toast(t('admin.capture.loopIdCopied', { uid: e.loop!.uid!.slice(0, 8) }), 'success'))
+                            .catch(() => {})
+                        }
                       : undefined
                   }
                 >
-                  {fmtTime(e.timestamp)}
+                  {e.loop?.uid ? e.loop.uid.slice(0, 8) : '—'}
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <span
+                    className={
+                      'inline-flex h-[19px] items-center gap-1 rounded-sm px-1.5 text-[10px] font-semibold ' +
+                      (finished
+                        ? 'bg-success-soft text-success-emphasis'
+                        : 'bg-warning-soft text-warning-emphasis')
+                    }
+                  >
+                    {!finished && (
+                      <span className="relative flex size-1.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning-emphasis opacity-60" />
+                        <span className="relative inline-flex size-1.5 rounded-full bg-warning-emphasis" />
+                      </span>
+                    )}
+                    {finished ? t('admin.capture.statusDone') : t('admin.capture.statusRunning')}
+                  </span>
+                </TableCell>
+                <TableCell
+                  className="font-mono text-[10.5px] whitespace-nowrap text-muted-foreground"
+                  title={fmtTime(startAt)}
+                >
+                  {fmtTimeMs(startAt)}
+                </TableCell>
+                <TableCell
+                  className="font-mono text-[10.5px] whitespace-nowrap text-muted-foreground"
+                  title={endAt ? fmtTime(endAt) : undefined}
+                >
+                  {endAt ? fmtTimeMs(endAt) : '—'}
                 </TableCell>
                 <TableCell className="text-end font-mono text-[10.5px] whitespace-nowrap text-muted-foreground">
                   {fmtDuration(e.durationMs)}
@@ -366,11 +413,10 @@ export default function CapturePage() {
                   {e.model}
                   {e.loop && (
                     <span
-                      className="ms-1.5 inline-flex h-[17px] items-center gap-1 rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
-                      title={`${t('admin.capture.loopTurnBadge', { turn: e.loop.turn })} · ${t('admin.capture.loopIdLabel')} ${e.loop.uid ?? ''}`}
+                      className="ms-1.5 inline-flex h-[17px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
+                      title={t('admin.capture.loopTurnBadge', { turn: e.loop.turn })}
                     >
                       {t('admin.capture.loopTurnShort', { turn: e.loop.turn })}
-                      {e.loop.uid && <span className="font-mono font-normal">{e.loop.uid.slice(0, 8)}</span>}
                     </span>
                   )}
                 </TableCell>
@@ -412,11 +458,12 @@ export default function CapturePage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
 
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={13} className="py-12 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={16} className="py-12 text-center text-[13px] text-muted-foreground">
                   {t('admin.capture.empty')}
                 </TableCell>
               </TableRow>

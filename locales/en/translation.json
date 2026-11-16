@@ -391,6 +391,10 @@
       "loopMetaValue": "turn {{turn}} of {{count}} requests",
       "loopIdLabel": "Loop ID",
       "loopSpanLabel": "Time span",
+      "loopIdCopyHint": "click to copy",
+      "loopIdCopied": "Copied loop ID {{uid}}",
+      "startTime": "Start",
+      "endTime": "End",
       "msgTimeHint": "Request time when this message first appeared (loop provenance)"
     },
     "test": {
