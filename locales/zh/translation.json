@@ -384,7 +384,12 @@
       "tagThinking": "思考中",
       "tagAnswering": "回答中",
       "tagToolCall": "工具调用中",
-      "parseFailedHint": "无法将请求体解析为消息列表，可切换「代理模式」查看原始报文"
+      "parseFailedHint": "无法将请求体解析为消息列表，可切换「代理模式」查看原始报文",
+      "loopTurnBadge": "第 {{turn}} 轮",
+      "loopTurnShort": "L{{turn}}",
+      "loopMetaLabel": "Agent Loop",
+      "loopMetaValue": "第 {{turn}} 轮 / 共 {{count}} 次请求",
+      "msgTimeHint": "该消息首次出现的请求时间（loop 溯源）"
     },
     "test": {
       "title": "测试 — {{name}}",

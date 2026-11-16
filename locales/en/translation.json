@@ -384,7 +384,12 @@
       "tagThinking": "Thinking",
       "tagAnswering": "Answering",
       "tagToolCall": "Tool call",
-      "parseFailedHint": "Could not parse the request body into messages — switch to Proxy View for the raw payloads"
+      "parseFailedHint": "Could not parse the request body into messages — switch to Proxy View for the raw payloads",
+      "loopTurnBadge": "Turn {{turn}}",
+      "loopTurnShort": "L{{turn}}",
+      "loopMetaLabel": "Agent loop",
+      "loopMetaValue": "turn {{turn}} of {{count}} requests",
+      "msgTimeHint": "Request time when this message first appeared (loop provenance)"
     },
     "test": {
       "title": "Test — {{name}}",

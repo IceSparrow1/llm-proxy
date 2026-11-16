@@ -106,6 +106,10 @@ export async function forwardPipeline(
   const isStream = body.stream === true
   const startTime = Date.now()
   const modelName = String(body.model ?? '')
+  // 客户端原始请求体（vision 替换前）。loop 归属哈希必须用它：识图描述是
+  // 非确定性的，用替换后的体会导致同一消息跨轮哈希不一致；消息条数不受
+  // 识图影响（只重写块内容），messageTimes 仍可与 requestIn 账本按下标对齐。
+  const clientRawBody = rawBody
 
   ctx.logger.log('request', `Inbound: ${logLabel}`, {
     type: inboundType,
@@ -143,7 +147,7 @@ export async function forwardPipeline(
         upstreamProvider: route.providerName,
         upstreamProtocol: route.providerType,
         upstreamModel: route.modelId,
-      })
+      }, clientRawBody)
       ctx.capture.updateRequest(pairId, 'requestIn', rawBody)
       ctx.capture.updateRequest(pairId, 'requestOut', JSON.stringify(upstream.body))
     }

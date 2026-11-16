@@ -101,6 +101,8 @@ export interface Config {
   host?: string
   /** 抓包缓冲区最大条数，默认 100 */
   captureMaxSize?: number
+  /** 抓包持久层最大保留条数（~/.llm-proxy/capture.db），默认 500 */
+  capturePersistMax?: number
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -138,6 +140,7 @@ export interface ConfigFile {
   port?: number
   host?: string
   capture_max_size?: number
+  capture_persist_max?: number
 }
 
 export interface ValidationError {

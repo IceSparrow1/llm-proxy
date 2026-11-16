@@ -5,6 +5,7 @@ import { ConfigStore } from '../config/store.js'
 import { StatusTracker } from '../status/tracker.js'
 import { UsageStore } from '../status/usage-store.js'
 import { CaptureBuffer } from '../proxy/capture.js'
+import { CaptureStore } from '../proxy/capture-store.js'
 import { Logger, type LogLevel } from '../log/logger.js'
 import { createI18n } from '../lib/i18n.js'
 import type { Server } from 'node:http'
@@ -201,7 +202,12 @@ export async function cmdStart(opts: StartOptions): Promise<void> {
   const tracker = new StatusTracker()
   const logDir = `${process.env.HOME ?? '/tmp'}/.llm-proxy`
   const usageStore = new UsageStore(`${logDir}/usage.db`, undefined /* Logger 在下面创建后再注入 */)
-  const capture = new CaptureBuffer(store.getConfig().config.captureMaxSize ?? 100)
+  const capturePersistMax = store.getConfig().config.capturePersistMax ?? 500
+  const captureStore = new CaptureStore(`${logDir}/capture.db`, capturePersistMax)
+  const captureMaxSize = store.getConfig().config.captureMaxSize ?? 100
+  const capture = new CaptureBuffer(captureMaxSize, captureStore)
+  // 预载历史抓包（重启不丢），并重建 agent-loop 归属索引
+  capture.restore(captureStore.latest(captureMaxSize))
   const persistedLevel = store.getConfig().config.logLevel
   const defaultLevel = (opts.logLevel && ['debug', 'info', 'warn', 'error'].includes(opts.logLevel))
     ? opts.logLevel as LogLevel
@@ -237,7 +243,16 @@ export async function cmdStart(opts: StartOptions): Promise<void> {
   // 进程能否退出完全取决于 handler 是否调用 process.exit。
   // 因此每一步都必须 try-catch 包住，保证最后 process.exit(0) 一定执行，
   // 否则进程残留（菜单栏 stopSync 退出后，Node.js 进程会变成孤儿）。
-  installShutdownHandlers({ server, visionCache, t, onShutdown: () => usageStore.close() })
+  installShutdownHandlers({
+    server,
+    visionCache,
+    t,
+    onShutdown: () => {
+      usageStore.close()
+      capture.flushPersist()
+      captureStore.close()
+    },
+  })
 
   logger.log('system', t('cli.start.started', { host, port, config: configPath }), { host, port, config: configPath })
 

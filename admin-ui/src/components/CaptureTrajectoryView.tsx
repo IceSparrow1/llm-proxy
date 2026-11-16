@@ -5,7 +5,7 @@ import JsonEditorPane from './JsonEditorPane'
 import CopyButton from './CopyButton'
 import SseFramesView from './SseFramesView'
 import AggregatedResultView from './AggregatedResultView'
-import { fmtChars, fmtSize, previewOf, type CaptureEntry } from '../lib/capture'
+import { fmtChars, fmtSize, fmtTimeMs, previewOf, type CaptureEntry } from '../lib/capture'
 import { parseSseFrames, streamPhase } from '../lib/sse'
 import {
   parseConversation,
@@ -24,6 +24,8 @@ interface LedgerRow {
   preview: string
   mono: boolean
   sizeLabel: string
+  /** 该消息归属的请求时间（loop 溯源），HH:MM:SS.mmm */
+  timeLabel?: string
   message?: ConversationMessage
   streamRaw?: string
 }
@@ -45,7 +47,8 @@ function tryParseJson(s: string): unknown {
  */
 export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }) {
   const { t } = useTranslation()
-  const conv = useMemo(() => parseConversation(entry), [entry])
+  // loop 条目优先按 requestIn（客户端视角）解析：溯源时间与 requestIn 消息序列对齐
+  const conv = useMemo(() => parseConversation(entry, { preferRequestIn: !!entry.loop }), [entry])
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [tab, setTab] = useState<DetailTab>('overview')
 
@@ -63,6 +66,17 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
     )
   }
 
+  // 每条消息的归属时间：loop 条目按 messageTimes 溯源（消息首次出现的请求时间）；
+  // 对齐校验失败（协议解析粒度漂移）或非 loop 条目回退到条目自身时间。
+  // responseOut 追加的模型回复用响应完成时间。
+  const loop = entry.loop
+  const aligned = !!(loop && loop.messageTimes.length === conv.requestMessageCount)
+  const msgTime = (m: ConversationMessage): number => {
+    if (m.index > conv.requestMessageCount) return entry.timestamp + (entry.durationMs ?? 0)
+    if (aligned) return loop!.messageTimes[m.index - 1]
+    return entry.timestamp
+  }
+
   const rows: LedgerRow[] = conv.messages.map((m) => ({
     key: 'm' + m.index,
     index: '#' + m.index,
@@ -71,6 +85,7 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
     preview: m.text,
     mono: m.kind !== 'message',
     sizeLabel: fmtChars(m.size),
+    timeLabel: fmtTimeMs(msgTime(m)),
     message: m,
   }))
 
@@ -85,6 +100,7 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
       preview: previewOf(sseRaw, 80),
       mono: true,
       sizeLabel: fmtSize(sseRaw),
+      timeLabel: entry.durationMs != null ? fmtTimeMs(entry.timestamp + entry.durationMs) : undefined,
       streamRaw: sseRaw,
     })
   } else if (!sseRaw && entry.durationMs == null) {
@@ -109,9 +125,19 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* 账本头：消息数 + 解析来源 */}
+      {/* 账本头：loop 轮数徽标 + 消息数 + 解析来源 */}
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-1.5 text-[10.5px] text-muted-foreground">
-        <span>{t('admin.capture.msgCount', { count: conv.messages.length })}</span>
+        <span className="flex items-center gap-2">
+          {entry.loop && (
+            <span
+              className="inline-flex h-[19px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
+              title={`${t('admin.capture.loopTurnBadge', { turn: entry.loop.turn })} · loop #${entry.loop.loopId}`}
+            >
+              {t('admin.capture.loopTurnBadge', { turn: entry.loop.turn })}
+            </span>
+          )}
+          {t('admin.capture.msgCount', { count: conv.messages.length })}
+        </span>
         <span className="font-mono">
           {t('admin.capture.parsedFrom')}{' '}
           {conv.sourcePhase === 'requestOut' ? '代理→上游' : '客户端→代理'}
@@ -173,6 +199,14 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
                 >
                   {r.preview}
                 </span>
+                {r.timeLabel && (
+                  <span
+                    className="shrink-0 font-mono text-[10px] text-muted-foreground/80"
+                    title={t('admin.capture.msgTimeHint')}
+                  >
+                    {r.timeLabel}
+                  </span>
+                )}
                 <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                   {r.sizeLabel}
                 </span>

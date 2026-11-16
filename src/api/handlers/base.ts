@@ -57,6 +57,7 @@ export async function handleReload(ctx: ServerContext, _req: IncomingMessage, re
   if (result.success) {
     const { config } = ctx.store.getConfig()
     ctx.capture?.setMaxSize(config.captureMaxSize ?? 100)
+    ctx.capture?.setPersistMax(config.capturePersistMax ?? 500)
     if (config.logLevel) ctx.logger.setLevel(config.logLevel)
     ctx.changeLocale?.(config.locale ?? 'en')
     ctx.logger.log('system', t('backend.config.reloadSuccess'), { version: result.version })

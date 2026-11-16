@@ -355,7 +355,17 @@ export default function CapturePage() {
                 <TableCell className="text-[11.5px] text-foreground">{e.source}</TableCell>
                 <TableCell className="text-[11.5px] text-muted-foreground">{e.adapterName || '—'}</TableCell>
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{e.protocol}</TableCell>
-                <TableCell className="font-mono text-[11px] text-muted-foreground">{e.model}</TableCell>
+                <TableCell className="font-mono text-[11px] whitespace-nowrap text-muted-foreground">
+                  {e.model}
+                  {e.loop && (
+                    <span
+                      className="ms-1.5 inline-flex h-[17px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
+                      title={t('admin.capture.loopTurnBadge', { turn: e.loop.turn })}
+                    >
+                      {t('admin.capture.loopTurnShort', { turn: e.loop.turn })}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell className="text-[11.5px] text-muted-foreground">{e.upstreamProvider || '—'}</TableCell>
                 <TableCell className="font-mono text-[11px] text-muted-foreground">
                   {e.upstreamProtocol || '—'}

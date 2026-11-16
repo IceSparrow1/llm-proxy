@@ -439,3 +439,154 @@ describe('proxy/capture', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// agent-loop 归属（startRequest 带 rawBody 的接管语义）
+// ---------------------------------------------------------------------------
+
+describe('proxy/capture loop attribution', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  function chatBody(userTexts: string[], assistantTexts: string[] = []): string {
+    const messages: unknown[] = [{ role: 'system', content: 'sys' }]
+    userTexts.forEach((t, i) => {
+      messages.push({ role: 'user', content: t })
+      if (assistantTexts[i] != null) messages.push({ role: 'assistant', content: assistantTexts[i] })
+    })
+    return JSON.stringify({ model: 'gpt-x', messages })
+  }
+
+  it('连续轮接管：复用 pairId/id，缓冲只保留一行，loop 字段正确', async () => {
+    const cap = new CaptureBuffer(100)
+    const p1 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['hi']))
+    assert.strictEqual(cap.getAll().length, 1)
+
+    await sleep(5)
+    // 真正的第 2 轮：第 1 轮历史 + 回答 + 新问题的超集消息
+    const turn2 = JSON.stringify({
+      model: 'gpt-x',
+      messages: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: '回答' },
+        { role: 'user', content: '下一问' },
+      ],
+    })
+    const p2 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, turn2)
+    assert.strictEqual(p2, p1, '第 2 轮应接管第 1 轮的 pairId')
+    assert.strictEqual(cap.getAll().length, 1, '接管后缓冲仍只有 1 条')
+
+    const entry = cap.getAll()[0]
+    assert.ok(entry.loop)
+    assert.strictEqual(entry.loop.loopId, p1)
+    assert.strictEqual(entry.loop.turn, 2)
+    assert.strictEqual(entry.loop.turnTimes.length, 2)
+    assert.strictEqual(entry.loop.messageTimes.length, 4)
+    // 前缀段继承旧时间，新消息盖新时间
+    const times = entry.loop.messageTimes
+    assert.strictEqual(times[0], times[1])
+    assert.notStrictEqual(times[2], times[0])
+  })
+
+  it('同轮重试：turn 不递增，turnTimes 刷新最后一项', async () => {
+    const cap = new CaptureBuffer(100)
+    const body = chatBody(['hi'])
+    const p1 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, body)
+    const t1 = cap.getAll()[0].loop!.turnTimes[0]
+
+    await sleep(5)
+    const p2 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, body)
+    assert.strictEqual(p2, p1)
+    const entry = cap.getAll()[0]
+    assert.strictEqual(entry.loop!.turn, 1, '重试不递增轮数')
+    assert.strictEqual(entry.loop!.turnTimes.length, 1)
+    assert.notStrictEqual(entry.loop!.turnTimes[0], t1, 'turnTimes 最后一项刷新为新请求时间')
+    assert.strictEqual(entry.loop!.messageTimes.length, 2)
+  })
+
+  it('无关请求开新 loop；无消息请求不参与归属', () => {
+    const cap = new CaptureBuffer(100)
+    const p1 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['任务 A']))
+    const p2 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['任务 B']))
+    assert.notStrictEqual(p1, p2)
+    assert.ok(cap.getAll().every((e) => e.loop!.turn === 1))
+
+    const p3 = cap.startRequest('proxy', 'openai', 'embed', undefined, JSON.stringify({ input: 'text' }))
+    void p3
+    const p4 = cap.startRequest('proxy', 'openai', 'raw', undefined, 'not-json')
+    void p4
+    // 非 JSON / 无消息条目照常入缓冲但无 loop
+    assert.ok(cap.getAll().length >= 3)
+    assert.ok(cap.getAll().filter((e) => !e.loop).length >= 1)
+  })
+
+  it('环形淘汰先落盘（persistFirst）', () => {
+    // 用假 store 验证淘汰路径会立即 upsert
+    const upserts: number[] = []
+    const fakeStore = { upsert: (e: { pairId: number }) => upserts.push(e.pairId) } as any
+    const cap = new CaptureBuffer(2, fakeStore)
+    cap.startRequest('proxy', 'openai', 'm', undefined, chatBody(['a']))
+    cap.startRequest('proxy', 'openai', 'm', undefined, chatBody(['b']))
+    cap.startRequest('proxy', 'openai', 'm', undefined, chatBody(['c']))
+    assert.strictEqual(cap.getAll().length, 2)
+    assert.strictEqual(upserts.length, 1, '被淘汰的第 1 条应立即落盘')
+  })
+
+  it('disable 不再清空缓冲', () => {
+    const cap = new CaptureBuffer(100)
+    cap.startRequest('proxy', 'openai', 'm', undefined, chatBody(['hi']))
+    cap.disable()
+    assert.strictEqual(cap.getAll().length, 1)
+  })
+
+  it('restore 预载并重建归属索引，新轮次可接上来', () => {
+    const cap1 = new CaptureBuffer(100)
+    const body1 = chatBody(['历史任务'])
+    cap1.startRequest('proxy', 'openai', 'gpt-x', undefined, body1)
+    const entries = cap1.getAll()
+    // 模拟持久化：给条目补上 requestIn
+    for (const e of entries) e.requestIn = body1
+
+    const cap2 = new CaptureBuffer(100)
+    cap2.restore(structuredClone(entries))
+    assert.strictEqual(cap2.getAll().length, 1)
+    const restored = cap2.getAll()[0]
+    assert.ok(restored.loop)
+
+    const turn2 = JSON.stringify({
+      model: 'gpt-x',
+      messages: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: '历史任务' },
+        { role: 'assistant', content: '答' },
+        { role: 'user', content: '重启后继续' },
+      ],
+    })
+    const p2 = cap2.startRequest('proxy', 'openai', 'gpt-x', undefined, turn2)
+    assert.strictEqual(p2, restored.pairId, '重启后第 2 轮应接上恢复的 loop')
+    assert.strictEqual(cap2.getAll().length, 1)
+    assert.strictEqual(cap2.getAll()[0].loop!.turn, 2)
+  })
+
+  it('接管时 SSE 只推同 pairId 的更新事件（无删除协议）', () => {
+    const cap = new CaptureBuffer(100)
+    const frames: string[] = []
+    const sub = fakeRes()
+    ;(sub as any).write = (s: string) => {
+      frames.push(s)
+      return true
+    }
+    cap.subscribe(sub)
+
+    const p1 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['hi']))
+    assert.strictEqual(frames.length, 1)
+    cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['完全不同的任务']))
+    assert.strictEqual(frames.length, 2)
+    const p2 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['hi'], ['答']))
+    void p2
+    // 第 3 个请求与第 1 个不同序列 → 新 loop，又一条新条目事件
+    assert.strictEqual(frames.length, 3)
+    const parsed = JSON.parse(frames[2].replace(/^data: /, '').trim())
+    assert.ok(parsed.pairId >= 1)
+  })
+})

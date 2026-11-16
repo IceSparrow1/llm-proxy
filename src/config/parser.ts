@@ -85,6 +85,7 @@ export function loadConfigFromYaml(filePath: string): Config {
     port: interpolated.port,
     host: interpolated.host,
     captureMaxSize: interpolated.capture_max_size,
+    capturePersistMax: interpolated.capture_persist_max,
   }
 }
 
@@ -131,6 +132,7 @@ export function serializeConfigToYaml(config: Config): string {
     port: config.port,
     host: config.host,
     capture_max_size: config.captureMaxSize,
+    capture_persist_max: config.capturePersistMax,
   }
   return stringifyYaml(file)
 }

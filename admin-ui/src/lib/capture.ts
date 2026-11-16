@@ -1,5 +1,17 @@
 /* ────────────────────────── 类型 / 常量 ────────────────────────── */
 
+/** agent-loop 归属信息（后端 src/proxy/capture.ts CaptureLoopInfo）。 */
+export interface CaptureLoopInfo {
+  /** loop 首轮的 pairId（= 本条目 pairId） */
+  loopId: number
+  /** 当前是第几轮（1 起始；同轮重试不递增） */
+  turn: number
+  /** 每轮请求时间（epoch ms），长度 = 轮数 */
+  turnTimes: number[]
+  /** requestIn 每条消息的归属时间（首次出现的请求时间），与消息序列对齐 */
+  messageTimes: number[]
+}
+
 /** 后端 CaptureEntry（src/proxy/capture.ts）。 */
 export interface CaptureEntry {
   id: number
@@ -17,6 +29,8 @@ export interface CaptureEntry {
   requestOut: string | null
   responseIn: string | null
   responseOut: string | null
+  /** agent-loop 归属（同 loop 只保留最新一轮） */
+  loop?: CaptureLoopInfo
 }
 
 export type PhaseKey = 'requestIn' | 'requestOut' | 'responseIn' | 'responseOut'
@@ -65,6 +79,13 @@ export function fmtTime(ts: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(
     d.getMinutes(),
   )}:${pad(d.getSeconds())}`
+}
+
+/** 带毫秒的本地时间（HH:MM:SS.mmm）——轨迹账本逐消息时间徽标用。 */
+export function fmtTimeMs(ts: number): string {
+  const d = new Date(ts)
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
 }
 
 export function fmtSize(s: string | null): string {

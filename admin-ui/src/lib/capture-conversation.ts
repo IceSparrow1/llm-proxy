@@ -40,6 +40,9 @@ export interface Conversation {
   messages: ConversationMessage[]
   /** 对话解析自哪个阶段的请求体 */
   sourcePhase: 'requestOut' | 'requestIn'
+  /** 来自请求体（不含 responseOut 追加的模型回复）的消息条数，
+   *  供 loop.messageTimes 按下标对齐校验。 */
+  requestMessageCount: number
 }
 
 const PREVIEW_MAX = 96
@@ -221,14 +224,22 @@ function hasItems(b: Record<string, unknown> | null): boolean {
   return !!b && (Array.isArray(b.messages) || Array.isArray(b.input) || typeof b.input === 'string')
 }
 
-/** 把一条抓包记录解析成消息级对话；无法提取出任何消息时返回 null。 */
-export function parseConversation(entry: CaptureEntry): Conversation | null {
+/**
+ * 把一条抓包记录解析成消息级对话；无法提取出任何消息时返回 null。
+ *
+ * opts.preferRequestIn：agent-loop 条目传 true——溯源时间按客户端请求体的
+ * 消息序列对齐，必须从 requestIn 解析才能与 loop.messageTimes 对上。
+ */
+export function parseConversation(entry: CaptureEntry, opts?: { preferRequestIn?: boolean }): Conversation | null {
   const out = tryParseBody(entry.requestOut)
   const inc = tryParseBody(entry.requestIn)
 
   let body: Record<string, unknown>
   let sourcePhase: Conversation['sourcePhase']
-  if (out && hasItems(out)) {
+  if (opts?.preferRequestIn && inc && hasItems(inc)) {
+    body = inc
+    sourcePhase = 'requestIn'
+  } else if (out && hasItems(out)) {
     body = out
     sourcePhase = 'requestOut'
   } else if (inc && hasItems(inc)) {
@@ -250,6 +261,7 @@ export function parseConversation(entry: CaptureEntry): Conversation | null {
   else if (Array.isArray(body.input)) raws.push(...body.input)
 
   let messages = compact(raws.map(fromAny))
+  const requestMessageCount = messages.length
 
   // 追加模型回复：仅当响应体是完整 JSON（非流式）；SSE 流式文本解析失败则静默跳过
   const resp = tryParseBody(entry.responseOut)
@@ -270,5 +282,6 @@ export function parseConversation(entry: CaptureEntry): Conversation | null {
   return {
     messages: messages.map((m, i) => ({ ...m, index: i + 1 })),
     sourcePhase,
+    requestMessageCount,
   }
 }

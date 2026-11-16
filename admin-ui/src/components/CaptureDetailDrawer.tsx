@@ -127,7 +127,7 @@ function ModeSwitch({
   )
 }
 
-/** 元信息行：时间 · 耗时 · 来源 · 入站 · 上游。 */
+/** 元信息行：时间 · 耗时 · 来源 · 入站 · 上游 ·（loop 条目）轮数。 */
 function MetaLine({ entry }: { entry: CaptureEntry }) {
   const { t } = useTranslation()
   const items: Array<{ label: string; value: string }> = [
@@ -142,6 +142,12 @@ function MetaLine({ entry }: { entry: CaptureEntry }) {
         : '—',
     },
   ]
+  if (entry.loop) {
+    items.push({
+      label: t('admin.capture.loopMetaLabel'),
+      value: t('admin.capture.loopMetaValue', { turn: entry.loop.turn, count: entry.loop.turnTimes.length }),
+    })
+  }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10.5px]">
       {items.map((it) => (
