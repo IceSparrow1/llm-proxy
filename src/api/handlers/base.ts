@@ -385,6 +385,74 @@ export async function handleDebugCapturesControl(ctx: ServerContext, req: Incomi
   json(res, 200, { success: true, data: { enabled: ctx.capture.isEnabled() } })
 }
 
+/** 解析 captures 控制类请求的 JSON body（失败返回 null） */
+async function readCaptureBody(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+  try {
+    const { readBody } = await import('../../lib/http-utils.js')
+    const raw = await readBody(req)
+    const parsed: unknown = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** 清理 N 天之前的抓包数据（内存缓冲 + 持久层） */
+export async function handleDebugCapturesCleanup(ctx: ServerContext, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!ctx.capture) {
+    json(res, 404, { success: false, error: 'Capture not enabled' })
+    return
+  }
+  const body = await readCaptureBody(req)
+  const days = body?.days
+  if (typeof days !== 'number' || !Number.isFinite(days) || days < 0) {
+    json(res, 400, { success: false, error: 'days must be a non-negative number' })
+    return
+  }
+  const removed = ctx.capture.cleanupOld(days)
+  ctx.logger.log('system', 'Capture data cleaned', { days, removed })
+  json(res, 200, { success: true, data: { removed } })
+}
+
+/** 备份 N 天之前的抓包数据：按 loop 导出 JSONL 并压缩成 zip（服务端写入指定路径） */
+export async function handleDebugCapturesBackup(ctx: ServerContext, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!ctx.capture) {
+    json(res, 404, { success: false, error: 'Capture not enabled' })
+    return
+  }
+  const body = await readCaptureBody(req)
+  const days = body?.days
+  const path = body?.path
+  const filename = body?.filename
+  if (typeof days !== 'number' || !Number.isFinite(days) || days < 0) {
+    json(res, 400, { success: false, error: 'days must be a non-negative number' })
+    return
+  }
+  if (typeof path !== 'string' || path.trim().length === 0) {
+    json(res, 400, { success: false, error: 'path is required' })
+    return
+  }
+  const entries = ctx.capture.collectOld(days)
+  if (entries.length === 0) {
+    json(res, 200, { success: true, data: { file: null, loops: 0, messages: 0 } })
+    return
+  }
+  try {
+    const { writeBackupZip } = await import('../../proxy/capture-backup.js')
+    const result = writeBackupZip(
+      entries,
+      path,
+      typeof filename === 'string' && filename.trim().length > 0 ? filename : '',
+    )
+    ctx.logger.log('system', 'Capture data backed up', { days, ...result })
+    json(res, 200, { success: true, data: result })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    ctx.logger.log('system', 'Capture backup failed', { error: message }, 'error')
+    json(res, 500, { success: false, error: message })
+  }
+}
+
 export function handleDebugCapturesStream(ctx: ServerContext, _req: IncomingMessage, res: ServerResponse): void {
   if (!ctx.capture) {
     json(res, 404, { success: false, error: 'Capture not enabled' })

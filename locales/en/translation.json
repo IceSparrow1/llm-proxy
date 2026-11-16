@@ -395,6 +395,18 @@
       "loopIdCopied": "Copied loop ID {{uid}}",
       "startTime": "Start",
       "endTime": "End",
+      "maintBackup": "Backup",
+      "maintCleanup": "Clean up",
+      "maintDaysLabel": "Process data older than (days)",
+      "maintDaysInvalid": "Days must be a number ≥ 0",
+      "maintCleanupHint": "Deletes captured data older than the given number of days (including persisted data). This cannot be undone.",
+      "maintBackupHint": "Exports data older than the given number of days as one JSONL per agent loop, compressed into a zip written to a local server path.",
+      "backupPathLabel": "Save path (local server dir, ~ supported)",
+      "backupNameLabel": "Filename",
+      "maintWorking": "Working…",
+      "cleanupDone": "Removed {{count}} entries",
+      "backupDone": "Backed up {{loops}} loops ({{messages}} messages) → {{file}}",
+      "backupEmpty": "No data to back up in this range",
       "msgTimeHint": "Request time when this message first appeared (loop provenance)"
     },
     "test": {

@@ -14,6 +14,7 @@ import CaptureDetailDrawer, { type CaptureDetailMode } from '../components/Captu
 import { adminFetch } from '../lib/api'
 import { useToast } from '../lib/toast'
 import { fmtDuration, fmtSize, fmtTime, fmtTimeMs, type CaptureEntry } from '../lib/capture'
+import CaptureMaintenanceDialog, { type CaptureMaintMode } from '../components/CaptureMaintenanceDialog'
 
 interface StatusRes {
   success?: boolean
@@ -76,6 +77,9 @@ export default function CapturePage() {
   const [entries, setEntries] = useState<CaptureEntry[]>([])
   const [running, setRunning] = useState(false)
   const [sourceFilter, setSourceFilter] = useState('')
+  /** 数据维护弹窗（清理/备份） */
+  const [maintOpen, setMaintOpen] = useState(false)
+  const [maintMode, setMaintMode] = useState<CaptureMaintMode>('cleanup')
   /** 详情抽屉：条目 id + 视图模式；null 关闭。 */
   const [detail, setDetail] = useState<{ id: number; mode: CaptureDetailMode } | null>(null)
   // 行点击沿用上次使用的视图模式（首次为轨迹模式）。
@@ -299,6 +303,19 @@ export default function CapturePage() {
           </>
         )}
 
+        <div className="mx-1 h-4 w-px bg-border" />
+        <Button variant="outline" size="sm" onClick={() => { setMaintMode('backup'); setMaintOpen(true) }}>
+          {t('admin.capture.maintBackup')}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-error-emphasis hover:bg-error-soft"
+          onClick={() => { setMaintMode('cleanup'); setMaintOpen(true) }}
+        >
+          {t('admin.capture.maintCleanup')}
+        </Button>
+
         {running && (
           <Badge variant="success" size="sm">
             ●
@@ -478,6 +495,17 @@ export default function CapturePage() {
         mode={detail?.mode ?? 'proxy'}
         onModeChange={changeMode}
         onClose={() => setDetail(null)}
+      />
+
+      {/* 数据维护弹窗：清理 / 备份（完成后刷新列表） */}
+      <CaptureMaintenanceDialog
+        open={maintOpen}
+        mode={maintMode}
+        onClose={() => setMaintOpen(false)}
+        onDone={(message) => {
+          toast(message, 'success')
+          loadHistory()
+        }}
       />
     </div>
   )

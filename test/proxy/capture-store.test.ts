@@ -105,3 +105,41 @@ describe('proxy/capture-store', () => {
     store2.close()
   })
 })
+
+describe('proxy/capture-store 时间清理与导出', () => {
+  let dir2: string
+  let store2: CaptureStore
+  const NOW = 1_700_000_000_000
+
+  beforeEach(() => {
+    dir2 = mkdtempSync(join(tmpdir(), 'capture-store-clean-'))
+    store2 = new CaptureStore(join(dir2, 'capture.db'))
+  })
+  afterEach(() => {
+    store2.close()
+    try { rmSync(dir2, { recursive: true, force: true }) } catch { /* best effort */ }
+  })
+
+  it('olderThan 取 N 天之前的记录，cleanup 删除并返回条数', () => {
+    const day = 86_400_000
+    store2.upsert(makeEntry(1, { timestamp: NOW - 10 * day }))
+    store2.upsert(makeEntry(2, { timestamp: NOW - 3 * day }))
+    store2.upsert(makeEntry(3, { timestamp: NOW - 1 * day }))
+
+    const old5 = store2.olderThan(5, NOW)
+    assert.deepStrictEqual(old5.map((e) => e.pairId), [1], '只含 5 天前的那条')
+
+    const removed = store2.cleanup(5, NOW)
+    assert.strictEqual(removed, 1)
+    assert.strictEqual(store2.count(), 2)
+    assert.deepStrictEqual(store2.latest(10).map((e) => e.pairId), [2, 3])
+  })
+
+  it('cleanup(0) 只删严格早于当前时刻的数据', () => {
+    store2.upsert(makeEntry(9, { timestamp: NOW - 1000 }))
+    store2.upsert(makeEntry(10, { timestamp: NOW + 1000 }))
+    const removed = store2.cleanup(0, NOW)
+    assert.strictEqual(removed, 1)
+    assert.deepStrictEqual(store2.latest(10).map((e) => e.pairId), [10])
+  })
+})

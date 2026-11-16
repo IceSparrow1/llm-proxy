@@ -395,6 +395,18 @@
       "loopIdCopied": "已复制 Loop ID {{uid}}",
       "startTime": "开始时间",
       "endTime": "结束时间",
+      "maintBackup": "备份数据",
+      "maintCleanup": "清理数据",
+      "maintDaysLabel": "处理多少天之前的数据",
+      "maintDaysInvalid": "天数必须是大于等于 0 的数字",
+      "maintCleanupHint": "将删除指定天数之前的抓包数据（含持久化数据），不可恢复。",
+      "maintBackupHint": "把指定天数之前的数据按 agent loop 导出 JSONL 并压缩成 zip，写入服务器本地路径。",
+      "backupPathLabel": "保存路径（服务器本地目录，支持 ~）",
+      "backupNameLabel": "文件名",
+      "maintWorking": "处理中…",
+      "cleanupDone": "已清理 {{count}} 条记录",
+      "backupDone": "已备份 {{loops}} 条 loop（{{messages}} 条消息）→ {{file}}",
+      "backupEmpty": "该时间段没有可备份的数据",
       "msgTimeHint": "该消息首次出现的请求时间（loop 溯源）"
     },
     "test": {

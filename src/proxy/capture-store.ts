@@ -169,6 +169,22 @@ export class CaptureStore {
     return rows.map(rowToEntry).reverse()
   }
 
+  /** 取早于 beforeDays 天之前的全部记录（时间升序），供备份导出 */
+  olderThan(beforeDays: number, now = Date.now()): CaptureEntry[] {
+    const cutoff = now - beforeDays * 86_400_000
+    const rows = this.db.prepare(`
+      SELECT * FROM captures WHERE ts < ? ORDER BY ts ASC, id ASC
+    `).all(cutoff) as unknown as CaptureRow[]
+    return rows.map(rowToEntry)
+  }
+
+  /** 删除 beforeDays 天之前的记录。返回删除条数。 */
+  cleanup(beforeDays: number, now = Date.now()): number {
+    const cutoff = now - beforeDays * 86_400_000
+    const res = this.db.prepare('DELETE FROM captures WHERE ts < ?').run(cutoff)
+    return Number(res.changes ?? 0)
+  }
+
   count(): number {
     return Number((this.db.prepare('SELECT COUNT(*) AS c FROM captures').get() as { c: number }).c)
   }

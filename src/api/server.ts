@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
-import { AdminHandoffStore, handleCreateAdminHandoff, handleExchangeAdminHandoff, handleGetConfig, handleReload, handleHealth, handleStatus, handleGetLogs, handleGetLogLevel, handleSetLogLevel, handleGetLocale, handleSetLocale, handleGetPort, handleSetPort, handleGetHost, handleSetHost, handleGetAdapters, handleCreateProvider, handleUpdateProvider, handleDeleteProvider, handleCreateAdapter, handleUpdateAdapter, handleDeleteAdapter, handleTestModel, handleTestAdapter, handleListModels, handlePullModels, handleGetProxyKey, handleSetProxyKey, handleGetTokenStats, handleGetTokenTimeline, handleGetTokenBreakdown, handleGetTokenDbInfo, handlePostTokenCleanup, handleDebugCapturesStatus, handleDebugCaptures, handleDebugCapturesControl, handleDebugCapturesStream, handleGetVision, handleSetVision, handleGetVisionCacheStats, handleClearVisionCache } from './handlers/index.js'
+import { AdminHandoffStore, handleCreateAdminHandoff, handleExchangeAdminHandoff, handleGetConfig, handleReload, handleHealth, handleStatus, handleGetLogs, handleGetLogLevel, handleSetLogLevel, handleGetLocale, handleSetLocale, handleGetPort, handleSetPort, handleGetHost, handleSetHost, handleGetAdapters, handleCreateProvider, handleUpdateProvider, handleDeleteProvider, handleCreateAdapter, handleUpdateAdapter, handleDeleteAdapter, handleTestModel, handleTestAdapter, handleListModels, handlePullModels, handleGetProxyKey, handleSetProxyKey, handleGetTokenStats, handleGetTokenTimeline, handleGetTokenBreakdown, handleGetTokenDbInfo, handlePostTokenCleanup, handleDebugCapturesStatus, handleDebugCaptures, handleDebugCapturesControl, handleDebugCapturesCleanup, handleDebugCapturesBackup, handleDebugCapturesStream, handleGetVision, handleSetVision, handleGetVisionCacheStats, handleClearVisionCache } from './handlers/index.js'
 import { handleAnthropicMessages, handleOpenAIChat, handleOpenAIResponses } from '../proxy/handlers.js'
 import { handleAdapterRequest, handleAdapterModels } from '../adapter/handlers.js'
 import { handleAdapterImageRequest } from '../adapter/image-handlers.js'
@@ -108,6 +108,8 @@ const ROUTES: Route[] = [
   { method: 'GET', pattern: /^\/admin\/debug\/captures\/status$/, handler: handleDebugCapturesStatus },
   { method: 'GET', pattern: /^\/admin\/debug\/captures\/stream$/, handler: handleDebugCapturesStream },
   { method: 'POST', pattern: /^\/admin\/debug\/captures\/control$/, handler: handleDebugCapturesControl },
+  { method: 'POST', pattern: /^\/admin\/debug\/captures\/cleanup$/, handler: handleDebugCapturesCleanup },
+  { method: 'POST', pattern: /^\/admin\/debug\/captures\/backup$/, handler: handleDebugCapturesBackup },
   { method: 'GET', pattern: /^\/admin\/adapters(\?.*)?$/, handler: handleGetAdapters },
   { method: 'POST', pattern: /^\/admin\/providers$/, handler: handleCreateProvider },
   { method: 'PUT', pattern: /^\/admin\/providers\/([a-zA-Z0-9_-]+)$/, handler: handleUpdateProvider },

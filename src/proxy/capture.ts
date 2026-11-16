@@ -365,6 +365,26 @@ export class CaptureBuffer {
     this.dirty.clear()
   }
 
+  /**
+   * 清理 beforeDays 天之前的数据：内存缓冲中逐条移除（不走 persistFirst，
+   * 避免把待删记录重新落盘）+ 持久层按时间删除。返回删除条数。
+   */
+  cleanupOld(beforeDays: number, now = Date.now()): number {
+    const cutoff = now - beforeDays * 86_400_000
+    for (const entry of [...this.buffer]) {
+      if (entry.timestamp < cutoff) this.removeEntry(entry.pairId)
+    }
+    const removed = this.store?.cleanup(beforeDays, now) ?? 0
+    return Math.max(removed, 0)
+  }
+
+  /** 收集 beforeDays 天之前的记录（优先持久层；未挂持久层时回退内存缓冲），供备份导出 */
+  collectOld(beforeDays: number, now = Date.now()): CaptureEntry[] {
+    if (this.store) return this.store.olderThan(beforeDays, now)
+    const cutoff = now - beforeDays * 86_400_000
+    return this.buffer.filter((e) => e.timestamp < cutoff)
+  }
+
   subscribe(res: ServerResponse): void {
     this.subscribers.set(res, { lastSeen: Date.now() })
     // 'close' 事件不可靠（客户端 kill -9 / NAT 超时 / 反代断开等都不会触发），

@@ -611,3 +611,38 @@ describe('proxy/capture loop attribution', () => {
     assert.ok(parsed.pairId >= 1)
   })
 })
+
+describe('proxy/capture 数据维护', () => {
+  const chatBody2 = (t: string): string => JSON.stringify({ model: 'm', messages: [{ role: 'user', content: t }] })
+
+  it('cleanupOld：缓冲内旧条目被移除；无 store 时 collectOld 回退缓冲', async () => {
+    const cap = new CaptureBuffer(100)
+    const p1 = cap.startRequest('proxy', 'openai', 'm', undefined, chatBody2('旧任务'))
+    const entry1 = cap.getAll()[0]
+    // 人为把第 1 条拨回 10 天前
+    ;(entry1 as { timestamp: number }).timestamp = Date.now() - 10 * 86_400_000
+    entry1.loop!.startedAt = entry1.timestamp
+    entry1.loop!.turnTimes = [entry1.timestamp]
+
+    const p2 = cap.startRequest('proxy', 'openai', 'm', undefined, chatBody2('新任务'))
+    assert.strictEqual(cap.getAll().length, 2)
+
+    const collected = cap.collectOld(5)
+    assert.deepStrictEqual(collected.map((e) => e.pairId), [p1])
+
+    cap.cleanupOld(5)
+    assert.strictEqual(cap.getAll().length, 1)
+    assert.strictEqual(cap.getAll()[0].pairId, p2)
+    void p1
+  })
+
+  it('cleanupOld 挂 store 时同步删除持久层', () => {
+    const deleted: number[] = []
+    const fakeStore = { cleanup: (d: number) => { deleted.push(d); return 3 } } as any
+    const cap = new CaptureBuffer(100, fakeStore)
+    cap.startRequest('proxy', 'openai', 'm', undefined, chatBody2('x'))
+    const removed = cap.cleanupOld(30)
+    assert.strictEqual(removed, 3)
+    assert.strictEqual(cap.getAll().length, 1, '新条目不受影响')
+  })
+})

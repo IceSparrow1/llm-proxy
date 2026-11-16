@@ -123,7 +123,7 @@ adapters:
 
 **Agent-loop 归属**（`src/proxy/attribution.ts`）：无状态 API 每轮全量重放历史，把消息序列做链式哈希，旧对话末位哈希出现在新请求前缀链中即判同一 loop；前缀断裂（上下文压缩）时用末尾 3 条消息的 tail 哈希兜底（同 source 且 30 分钟内活跃）。同 loop 只保留最新一轮：新轮接管旧条目的 pairId/id（前端按 pairId 原地更新）。`entry.loop` 携带定位锚点：`uid`（uuid v4，跨重启稳定）、`turn`/`turnTimes`、`startedAt`/`lastReplyAt`（loop 时间跨度终点 = 最近一次回复完成）、`messageTimes`（每条消息首次出现的请求时间，轨迹视图逐行展示）。归属哈希用 **vision 替换前**的客户端原始体（`pipeline.ts` 的 `clientRawBody`），消息提取粒度与前端 `capture-conversation.ts` 保持一致。
 
-**抓包持久化**（`src/proxy/capture-store.ts`）：条目变更 2s 防抖落盘 `~/.llm-proxy/capture.db`（sqlite，pair_id 主键 upsert），启动时 `restore()` 预载并重建归属索引，重启不丢。保留上限 `capture_persist_max`（默认 500 条）。行为约定：「暂停」不清缓冲，清空仅由控制端点 `clear:true` 触发且连同持久层一起清；缓冲淘汰时未落盘条目会先写库再移除。
+**抓包持久化**（`src/proxy/capture-store.ts`）：条目变更 2s 防抖落盘 `~/.llm-proxy/capture.db`（sqlite，pair_id 主键 upsert），启动时 `restore()` 预载并重建归属索引，重启不丢。保留上限 `capture_persist_max`（默认 500 条）。行为约定：「暂停」不清缓冲，清空仅由控制端点 `clear:true` 触发且连同持久层一起清；缓冲淘汰时未落盘条目会先写库再移除。**数据维护**：`POST /admin/debug/captures/cleanup`（{days} 删除 N 天前数据）与 `POST /admin/debug/captures/backup`（{days,path,filename} 把 N 天前数据按 loop 导出 JSONL 打成 zip 写入服务器本地路径，`capture-backup.ts`，zip 用系统 zip 命令）。
 
 ## Admin UI 前端
 
