@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerBody } from '@appica/ui-react/drawer'
 import CaptureProxyView from './CaptureProxyView'
 import CaptureTrajectoryView from './CaptureTrajectoryView'
-import { fmtDuration, fmtTime, type CaptureEntry } from '../lib/capture'
+import { fmtDuration, fmtTime, fmtTimeMs, type CaptureEntry } from '../lib/capture'
 
 export type CaptureDetailMode = 'proxy' | 'trajectory'
 
@@ -146,6 +146,16 @@ function MetaLine({ entry }: { entry: CaptureEntry }) {
     items.push({
       label: t('admin.capture.loopMetaLabel'),
       value: t('admin.capture.loopMetaValue', { turn: entry.loop.turn, count: entry.loop.turnTimes.length }),
+    })
+    items.push({ label: t('admin.capture.loopIdLabel'), value: entry.loop.uid ?? '—' })
+    // 时间跨度：首轮请求 → 最近一次回复完成（进行中时为上一轮回复）
+    const startedAt = entry.loop.startedAt ?? entry.loop.turnTimes[0] ?? entry.timestamp
+    const endAt = entry.loop.lastReplyAt
+    items.push({
+      label: t('admin.capture.loopSpanLabel'),
+      value: endAt
+        ? `${fmtTimeMs(startedAt)} → ${fmtTimeMs(endAt)}（${fmtDuration(endAt - startedAt)}）`
+        : `${fmtTimeMs(startedAt)} → …`,
     })
   }
   return (

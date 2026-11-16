@@ -4,12 +4,18 @@
 export interface CaptureLoopInfo {
   /** loop 首轮的 pairId（= 本条目 pairId） */
   loopId: number
+  /** loop 唯一锚点（uuid v4），供消息定位与跨重启引用 */
+  uid?: string
   /** 当前是第几轮（1 起始；同轮重试不递增） */
   turn: number
+  /** 首轮请求时间（epoch ms） */
+  startedAt?: number
   /** 每轮请求时间（epoch ms），长度 = 轮数 */
   turnTimes: number[]
   /** requestIn 每条消息的归属时间（首次出现的请求时间），与消息序列对齐 */
   messageTimes: number[]
+  /** 最近一次模型回复完成的时间；loop 进行中时为上一轮的完成时间 */
+  lastReplyAt?: number
 }
 
 /** 后端 CaptureEntry（src/proxy/capture.ts）。 */

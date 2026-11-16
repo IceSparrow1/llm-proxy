@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { ServerResponse } from 'node:http'
 import type { CaptureStore } from './capture-store.js'
 import {
@@ -25,12 +26,18 @@ export interface CaptureMeta {
 export interface CaptureLoopInfo {
   /** loop 首轮的 pairId（= 本条目 pairId） */
   loopId: number
+  /** loop 唯一锚点（uuid v4），供消息定位与跨重启引用 */
+  uid: string
   /** 当前是第几轮（1 起始；同轮重试不递增） */
   turn: number
+  /** 首轮请求时间（epoch ms） */
+  startedAt: number
   /** 每轮请求时间（epoch ms），长度 = 轮数 */
   turnTimes: number[]
   /** 当前 requestIn 每条消息的归属时间（首次出现的请求时间），与消息序列对齐 */
   messageTimes: number[]
+  /** 最近一次模型回复完成的时间（epoch ms）；loop 进行中时为上一轮的完成时间 */
+  lastReplyAt?: number
 }
 
 export interface CaptureEntry extends CaptureMeta {
@@ -171,11 +178,14 @@ export class CaptureBuffer {
       const retry = attr.match.retry && oldLoop != null
       loop = {
         loopId: pairId,
+        uid: oldLoop?.uid ?? randomUUID(),
         turn: oldLoop ? (retry ? oldLoop.turn : oldLoop.turn + 1) : 1,
+        startedAt: oldLoop?.startedAt ?? now,
         turnTimes: oldLoop
           ? (retry ? [...oldLoop.turnTimes.slice(0, -1), now] : [...oldLoop.turnTimes, now])
           : [now],
         messageTimes: mergeMessageTimes(oldLoop?.messageTimes ?? [], attr.match, now, attr.stepCount),
+        lastReplyAt: oldLoop?.lastReplyAt,
       }
     } else {
       pairId = this.nextPairId++
@@ -183,7 +193,9 @@ export class CaptureBuffer {
       if (attr) {
         loop = {
           loopId: pairId,
+          uid: randomUUID(),
           turn: 1,
+          startedAt: now,
           turnTimes: [now],
           messageTimes: new Array<number>(attr.stepCount).fill(now),
         }
@@ -232,6 +244,8 @@ export class CaptureBuffer {
     entry[field] = data
     if (field === 'responseOut') {
       entry.durationMs = Math.max(0, Date.now() - entry.timestamp)
+      // loop 时间跨度终点：最近一次模型回复完成时间
+      if (entry.loop) entry.loop.lastReplyAt = entry.timestamp + entry.durationMs
     }
     // 流式 responseIn 按 1s 节流高频写入，不标记落盘（完成时的 responseOut 会带上最终值）
     if (field === 'requestOut' || field === 'responseOut') {
@@ -254,6 +268,12 @@ export class CaptureBuffer {
       this.entryMap.set(entry.pairId, entry)
       if (entry.id >= this.nextId) this.nextId = entry.id + 1
       if (entry.pairId >= this.nextPairId) this.nextPairId = entry.pairId + 1
+      // 旧版本持久化行没有 uid/startedAt：回填并落盘
+      if (entry.loop && !entry.loop.uid) {
+        entry.loop.uid = randomUUID()
+        entry.loop.startedAt ??= entry.loop.turnTimes[0] ?? entry.timestamp
+        this.markDirty(entry.pairId)
+      }
       this.reindexLoop(entry)
       if (this.buffer.length > this.maxSize) {
         const removed = this.buffer.splice(0, this.buffer.length - this.maxSize)

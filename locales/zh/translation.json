@@ -389,6 +389,8 @@
       "loopTurnShort": "L{{turn}}",
       "loopMetaLabel": "Agent Loop",
       "loopMetaValue": "第 {{turn}} 轮 / 共 {{count}} 次请求",
+      "loopIdLabel": "Loop ID",
+      "loopSpanLabel": "时间跨度",
       "msgTimeHint": "该消息首次出现的请求时间（loop 溯源）"
     },
     "test": {

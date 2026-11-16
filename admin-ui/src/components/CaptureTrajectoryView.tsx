@@ -129,12 +129,20 @@ export default function CaptureTrajectoryView({ entry }: { entry: CaptureEntry }
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-1.5 text-[10.5px] text-muted-foreground">
         <span className="flex items-center gap-2">
           {entry.loop && (
-            <span
-              className="inline-flex h-[19px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
-              title={`${t('admin.capture.loopTurnBadge', { turn: entry.loop.turn })} · loop #${entry.loop.loopId}`}
-            >
-              {t('admin.capture.loopTurnBadge', { turn: entry.loop.turn })}
-            </span>
+            <>
+              <span
+                className="inline-flex h-[19px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
+                title={`${t('admin.capture.loopTurnBadge', { turn: entry.loop.turn })} · ${t('admin.capture.loopIdLabel')} ${entry.loop.uid ?? ''}`}
+              >
+                {t('admin.capture.loopTurnBadge', { turn: entry.loop.turn })}
+              </span>
+              <span
+                className="font-mono text-[10px] text-muted-foreground"
+                title={t('admin.capture.loopIdLabel') + ' ' + (entry.loop.uid ?? '')}
+              >
+                {entry.loop.uid ? entry.loop.uid.slice(0, 8) : '—'}
+              </span>
+            </>
           )}
           {t('admin.capture.msgCount', { count: conv.messages.length })}
         </span>

@@ -389,6 +389,8 @@
       "loopTurnShort": "L{{turn}}",
       "loopMetaLabel": "Agent loop",
       "loopMetaValue": "turn {{turn}} of {{count}} requests",
+      "loopIdLabel": "Loop ID",
+      "loopSpanLabel": "Time span",
       "msgTimeHint": "Request time when this message first appeared (loop provenance)"
     },
     "test": {

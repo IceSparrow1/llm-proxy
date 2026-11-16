@@ -461,6 +461,13 @@ describe('proxy/capture loop attribution', () => {
     const p1 = cap.startRequest('proxy', 'openai', 'gpt-x', undefined, chatBody(['hi']))
     assert.strictEqual(cap.getAll().length, 1)
 
+    // loop 锚点：uid（uuid v4）与 startedAt 在第 1 轮生成
+    const first = cap.getAll()[0]
+    const uid1 = first.loop!.uid
+    const startedAt1 = first.loop!.startedAt
+    assert.match(uid1, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    assert.strictEqual(startedAt1, first.timestamp)
+
     await sleep(5)
     // 真正的第 2 轮：第 1 轮历史 + 回答 + 新问题的超集消息
     const turn2 = JSON.stringify({
@@ -479,6 +486,8 @@ describe('proxy/capture loop attribution', () => {
     const entry = cap.getAll()[0]
     assert.ok(entry.loop)
     assert.strictEqual(entry.loop.loopId, p1)
+    assert.strictEqual(entry.loop.uid, uid1, '接管后 uid 不变（消息定位锚点）')
+    assert.strictEqual(entry.loop.startedAt, startedAt1, 'startedAt 保持首轮时间')
     assert.strictEqual(entry.loop.turn, 2)
     assert.strictEqual(entry.loop.turnTimes.length, 2)
     assert.strictEqual(entry.loop.messageTimes.length, 4)
@@ -486,6 +495,10 @@ describe('proxy/capture loop attribution', () => {
     const times = entry.loop.messageTimes
     assert.strictEqual(times[0], times[1])
     assert.notStrictEqual(times[2], times[0])
+
+    // 回复完成 → 时间跨度终点
+    cap.updateRequest(p1, 'responseOut', '{"ok":true}')
+    assert.strictEqual(entry.loop!.lastReplyAt, entry.timestamp + entry.durationMs!)
   })
 
   it('同轮重试：turn 不递增，turnTimes 刷新最后一项', async () => {
@@ -548,10 +561,18 @@ describe('proxy/capture loop attribution', () => {
     for (const e of entries) e.requestIn = body1
 
     const cap2 = new CaptureBuffer(100)
-    cap2.restore(structuredClone(entries))
+    // 模拟旧版本持久化行：loop 无 uid/startedAt，restore 时应回填
+    const legacy = structuredClone(entries).map((e) => {
+      delete (e.loop as Record<string, unknown> | undefined)?.uid
+      delete (e.loop as Record<string, unknown> | undefined)?.startedAt
+      return e
+    })
+    cap2.restore(legacy)
     assert.strictEqual(cap2.getAll().length, 1)
     const restored = cap2.getAll()[0]
     assert.ok(restored.loop)
+    assert.match(restored.loop.uid, /^[0-9a-f]{8}-/, '旧数据 restore 时回填 uid')
+    assert.ok(restored.loop.startedAt != null, '旧数据 restore 时回填 startedAt')
 
     const turn2 = JSON.stringify({
       model: 'gpt-x',

@@ -13,7 +13,7 @@ import {
 import CaptureDetailDrawer, { type CaptureDetailMode } from '../components/CaptureDetailDrawer'
 import { adminFetch } from '../lib/api'
 import { useToast } from '../lib/toast'
-import { fmtDuration, fmtSize, fmtTime, type CaptureEntry } from '../lib/capture'
+import { fmtDuration, fmtSize, fmtTime, fmtTimeMs, type CaptureEntry } from '../lib/capture'
 
 interface StatusRes {
   success?: boolean
@@ -346,7 +346,14 @@ export default function CapturePage() {
                 className="cursor-pointer"
               >
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{e.id}</TableCell>
-                <TableCell className="font-mono text-[10.5px] whitespace-nowrap text-muted-foreground">
+                <TableCell
+                  className="font-mono text-[10.5px] whitespace-nowrap text-muted-foreground"
+                  title={
+                    e.loop
+                      ? `${t('admin.capture.loopSpanLabel')}: ${fmtTimeMs(e.loop.startedAt ?? e.loop.turnTimes[0] ?? e.timestamp)} → ${e.loop.lastReplyAt ? fmtTimeMs(e.loop.lastReplyAt) : '…'}`
+                      : undefined
+                  }
+                >
                   {fmtTime(e.timestamp)}
                 </TableCell>
                 <TableCell className="text-end font-mono text-[10.5px] whitespace-nowrap text-muted-foreground">
@@ -359,10 +366,11 @@ export default function CapturePage() {
                   {e.model}
                   {e.loop && (
                     <span
-                      className="ms-1.5 inline-flex h-[17px] items-center rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
-                      title={t('admin.capture.loopTurnBadge', { turn: e.loop.turn })}
+                      className="ms-1.5 inline-flex h-[17px] items-center gap-1 rounded-sm bg-primary-soft px-1.5 text-[10px] font-semibold text-primary-strong"
+                      title={`${t('admin.capture.loopTurnBadge', { turn: e.loop.turn })} · ${t('admin.capture.loopIdLabel')} ${e.loop.uid ?? ''}`}
                     >
                       {t('admin.capture.loopTurnShort', { turn: e.loop.turn })}
+                      {e.loop.uid && <span className="font-mono font-normal">{e.loop.uid.slice(0, 8)}</span>}
                     </span>
                   )}
                 </TableCell>
